@@ -1,8 +1,20 @@
 # Changelog
 
-All notable changes to Margo are documented here.
+Changes to Margo Inline are documented here. Entries before 0.2.0 describe the upstream Margo project.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.0] — 2026-11-04
+
+First independent Margo Inline release, maintained by ignorantshr.
+
+- New extension identity, repository links, icon, and command/settings namespace.
+- Always-visible `[✎]` annotations with a customizable theme color.
+- Private-only storage with a self-ignoring `.margo` directory.
+- Removed priority and team controls and the editor gutter add button.
+- Fixed hover previews to include both note titles and bodies.
+- Added regression coverage for rendering, storage, and hover previews.
+- Preserved upstream attribution, AGPL license, and existing private note storage.
 
 ## [0.1.0] — 2026-04-21
 
@@ -22,4 +34,4 @@ Initial release. Margo is a fresh codebase; its lineage traces back to the autho
 
 ### License
 
-- Licensed under AGPL-3.0. Commercial licensing available on request.
+- Licensed under AGPL-3.0. The upstream author offered separate commercial licensing for upstream code.

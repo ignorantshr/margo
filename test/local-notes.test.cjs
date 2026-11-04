@@ -101,7 +101,7 @@ test('new notes create private storage and edits/deletion persist', async t => {
 test('manifest exposes no priority or vault controls', () => {
     const { contributes } = require('../package.json');
     assert.ok(contributes.commands.every(c => !/Priority|Vault/.test(c.command)));
-    assert.deepEqual(contributes.configuration.properties['margo.treeGroupBy'].enum, ['file', 'category', 'status']);
+    assert.deepEqual(contributes.configuration.properties['margoInline.treeGroupBy'].enum, ['file', 'category', 'status']);
 });
 
 test('hover includes single-line titles and multiline bodies', () => {

@@ -19,7 +19,7 @@ let statusBar: StatusBarManager | undefined;
 export async function activate(context: vscode.ExtensionContext) {
     const workspaceRoot = getCurrentWorkspaceRoot();
     if (!workspaceRoot) {
-        vscode.window.showWarningMessage('Margo: No workspace folder open');
+        vscode.window.showWarningMessage('Margo Inline: No workspace folder open');
         return;
     }
 
@@ -30,7 +30,7 @@ export async function activate(context: vscode.ExtensionContext) {
     provider.registerHoverProvider(context);
 
     treeProvider = new NotesTreeProvider(storage, context.extensionUri);
-    const treeView = vscode.window.createTreeView('margoExplorer', {
+    const treeView = vscode.window.createTreeView('margoInlineExplorer', {
         treeDataProvider: treeProvider,
         showCollapseAll: true,
     });
@@ -61,14 +61,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
 function registerMainCommands(context: vscode.ExtensionContext) {
     context.subscriptions.push(
-        vscode.commands.registerCommand('margo.addNote', async () => {
+        vscode.commands.registerCommand('margoInline.addNote', async () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor || !provider) return;
             const line = editor.selection.active.line;
             await provider.addNoteAtLine(editor.document.uri, line);
         }),
 
-        vscode.commands.registerCommand('margo.refreshTree', () => {
+        vscode.commands.registerCommand('margoInline.refreshTree', () => {
             treeProvider?.refresh();
             if (vscode.window.activeTextEditor && provider) {
                 provider.renderNotesForFile(vscode.window.activeTextEditor.document.uri);

@@ -100,14 +100,14 @@ export async function exportToMarkdown(storage: NoteStorage): Promise<void> {
     const workspaceRoot = storage.getWorkspaceRoot();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const saveUri = await vscode.window.showSaveDialog({
-        defaultUri: vscode.Uri.file(path.join(workspaceRoot, `margo-${timestamp}.md`)),
+        defaultUri: vscode.Uri.file(path.join(workspaceRoot, `margo-inline-${timestamp}.md`)),
         filters: { 'Markdown': ['md'] }
     });
     if (!saveUri) return;
 
     const { total, categories, statuses } = countNotes(notesMap);
 
-    let md = `# Margo Report\n\n`;
+    let md = `# Margo Inline Report\n\n`;
     md += `Generated: ${new Date().toLocaleString()}\n\n`;
     md += `Total Notes: ${total}\n\n---\n\n`;
 
@@ -159,7 +159,7 @@ export async function exportToHtml(storage: NoteStorage): Promise<void> {
     const workspaceRoot = storage.getWorkspaceRoot();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const saveUri = await vscode.window.showSaveDialog({
-        defaultUri: vscode.Uri.file(path.join(workspaceRoot, `margo-${timestamp}.html`)),
+        defaultUri: vscode.Uri.file(path.join(workspaceRoot, `margo-inline-${timestamp}.html`)),
         filters: { 'HTML': ['html'] }
     });
     if (!saveUri) return;
@@ -171,7 +171,7 @@ export async function exportToHtml(storage: NoteStorage): Promise<void> {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Margo Report</title>
+    <title>Margo Inline Report</title>
     <style>
         :root {
             --bg: #1e1e2e; --text: #cdd6f4; --card: #313244; --border: #45475a;
@@ -210,7 +210,7 @@ export async function exportToHtml(storage: NoteStorage): Promise<void> {
 </head>
 <body>
     <div class="container">
-        <h1>Margo Report</h1>
+        <h1>Margo Inline Report</h1>
         <p class="meta">Generated: ${new Date().toLocaleString()} · ${total} notes · ${statuses.open} open · ${statuses.resolved} resolved</p>
         <div class="summary">
             <div class="summary-card resolved"><div class="count">${statuses.resolved}</div><div>✓ Resolved</div></div>
@@ -288,8 +288,8 @@ export async function copyAsAiPrompt(storage: NoteStorage): Promise<void> {
 
 export function registerExportCommands(context: vscode.ExtensionContext, storage: NoteStorage): void {
     context.subscriptions.push(
-        vscode.commands.registerCommand('margo.exportMarkdown', () => exportToMarkdown(storage)),
-        vscode.commands.registerCommand('margo.exportHtml', () => exportToHtml(storage)),
-        vscode.commands.registerCommand('margo.copyAsAiPrompt', () => copyAsAiPrompt(storage)),
+        vscode.commands.registerCommand('margoInline.exportMarkdown', () => exportToMarkdown(storage)),
+        vscode.commands.registerCommand('margoInline.exportHtml', () => exportToHtml(storage)),
+        vscode.commands.registerCommand('margoInline.copyAsAiPrompt', () => copyAsAiPrompt(storage)),
     );
 }

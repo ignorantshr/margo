@@ -8,8 +8,8 @@ export class StatusBarManager implements vscode.Disposable {
 
     constructor(private storage: NoteStorage) {
         this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
-        this.item.command = 'margoExplorer.focus';
-        this.item.tooltip = 'Margo — click to open explorer';
+        this.item.command = 'margoInlineExplorer.focus';
+        this.item.tooltip = 'Margo Inline — click to open explorer';
 
         this.changeDisposable = storage.onDidChange(() => this.update());
         this.update();

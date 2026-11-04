@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import { Category, GroupMode } from './utils';
 
-const SECTION = 'margo';
+const SECTION = 'margoInline';
 
 export interface MargoConfig {
     defaultAuthor: string;

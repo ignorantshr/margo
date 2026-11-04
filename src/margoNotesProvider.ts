@@ -12,7 +12,7 @@ import { NoteStorage } from './noteStorage';
 import { getConfig } from './config';
 
 function getNoteContextValue(note: Pick<Note, 'status'>, armed = false): string {
-    const base = note.status === 'resolved' ? 'margoNoteResolved' : 'margoNote';
+    const base = note.status === 'resolved' ? 'margoInlineNoteResolved' : 'margoInlineNote';
     const vaultSegment = 'Local';
     return armed ? `${base}${vaultSegment}Armed` : `${base}${vaultSegment}`;
 }
@@ -92,7 +92,7 @@ export class MargoNotesProvider {
     private storage: NoteStorage;
     private storageListener: vscode.Disposable;
     private readonly inlineDecoration = vscode.window.createTextEditorDecorationType({
-        after: { color: new vscode.ThemeColor('margo.inlineNoteForeground'), margin: '0 0 0 3ch', fontStyle: 'normal', fontWeight: 'normal' }
+        after: { color: new vscode.ThemeColor('margoInline.inlineNoteForeground'), margin: '0 0 0 3ch', fontStyle: 'normal', fontWeight: 'normal' }
     });
     private readonly extensionUri: vscode.Uri;
 
@@ -107,8 +107,8 @@ export class MargoNotesProvider {
         this.extensionUri = context.extensionUri;
 
         this.commentController = vscode.comments.createCommentController(
-            'margo',
-            'Margo'
+            'margoInline',
+            'Margo Inline'
         );
 
         this.commentController.options = {
@@ -137,22 +137,22 @@ export class MargoNotesProvider {
 
     private registerCommands(context: vscode.ExtensionContext): void {
         const commands: vscode.Disposable[] = [
-            vscode.commands.registerCommand('margo.createNote', (reply: vscode.CommentReply) => {
+            vscode.commands.registerCommand('margoInline.createNote', (reply: vscode.CommentReply) => {
                 this.handleCreateNote(reply);
             }),
 
-            vscode.commands.registerCommand('margo.saveNote', (comment: MargoComment) => {
+            vscode.commands.registerCommand('margoInline.saveNote', (comment: MargoComment) => {
                 this.handleSaveNote(comment);
             }),
 
-            vscode.commands.registerCommand('margo.cancelNote', (comment: MargoComment) => {
+            vscode.commands.registerCommand('margoInline.cancelNote', (comment: MargoComment) => {
                 if (comment.parent) {
                     comment.mode = vscode.CommentMode.Preview;
                     comment.parent.comments = comment.parent.comments.map(c => c);
                 }
             }),
 
-            vscode.commands.registerCommand('margo.armDeleteNote', (comment: MargoComment) => {
+            vscode.commands.registerCommand('margoInline.armDeleteNote', (comment: MargoComment) => {
                 if (!comment.parent) return;
                 const noteId = comment.note.id;
                 const existing = this.deleteArmTimers.get(noteId);
@@ -167,7 +167,7 @@ export class MargoNotesProvider {
                 this.deleteArmTimers.set(noteId, timer);
             }),
 
-            vscode.commands.registerCommand('margo.confirmDeleteNote', (comment: MargoComment) => {
+            vscode.commands.registerCommand('margoInline.confirmDeleteNote', (comment: MargoComment) => {
                 if (!comment.parent) return;
                 const noteId = comment.note.id;
                 const timer = this.deleteArmTimers.get(noteId);
@@ -175,40 +175,40 @@ export class MargoNotesProvider {
                 this.handleDeleteNote(comment.parent, true);
             }),
 
-            vscode.commands.registerCommand('margo.deleteNote', (arg: vscode.CommentThread | MargoComment) => {
+            vscode.commands.registerCommand('margoInline.deleteNote', (arg: vscode.CommentThread | MargoComment) => {
                 const thread = 'parent' in arg && arg.parent ? arg.parent : arg as vscode.CommentThread;
                 this.handleDeleteNote(thread, false);
             }),
 
-            vscode.commands.registerCommand('margo.discardNote', (reply: vscode.CommentReply) => {
+            vscode.commands.registerCommand('margoInline.discardNote', (reply: vscode.CommentReply) => {
                 reply.thread.dispose();
             }),
 
-            vscode.commands.registerCommand('margo.editNote', (comment: MargoComment) => {
+            vscode.commands.registerCommand('margoInline.editNote', (comment: MargoComment) => {
                 if (comment.parent) {
                     comment.mode = vscode.CommentMode.Editing;
                     comment.parent.comments = comment.parent.comments.map(c => c);
                 }
             }),
 
-            vscode.commands.registerCommand('margo.resolveNote', (arg: vscode.CommentThread | MargoComment) => {
+            vscode.commands.registerCommand('margoInline.resolveNote', (arg: vscode.CommentThread | MargoComment) => {
                 const thread = 'parent' in arg && arg.parent ? arg.parent : arg as vscode.CommentThread;
                 this.handleSetStatus(thread, 'resolved');
             }),
 
-            vscode.commands.registerCommand('margo.unresolveNote', (arg: vscode.CommentThread | MargoComment) => {
+            vscode.commands.registerCommand('margoInline.unresolveNote', (arg: vscode.CommentThread | MargoComment) => {
                 const thread = 'parent' in arg && arg.parent ? arg.parent : arg as vscode.CommentThread;
                 this.handleSetStatus(thread, 'open');
             }),
 
-            vscode.commands.registerCommand('margo.setCategoryTodo', (thread: vscode.CommentThread) =>
+            vscode.commands.registerCommand('margoInline.setCategoryTodo', (thread: vscode.CommentThread) =>
                 this.handleSetCategory(thread, 'todo')),
-            vscode.commands.registerCommand('margo.setCategoryBug', (thread: vscode.CommentThread) =>
+            vscode.commands.registerCommand('margoInline.setCategoryBug', (thread: vscode.CommentThread) =>
                 this.handleSetCategory(thread, 'bug')),
-            vscode.commands.registerCommand('margo.setCategoryNote', (thread: vscode.CommentThread) =>
+            vscode.commands.registerCommand('margoInline.setCategoryNote', (thread: vscode.CommentThread) =>
                 this.handleSetCategory(thread, 'note')),
 
-            vscode.commands.registerCommand('margo.editProperties', (comment: MargoComment) =>
+            vscode.commands.registerCommand('margoInline.editProperties', (comment: MargoComment) =>
                 this.handleEditProperties(comment)),
 
             this.commentController
@@ -445,7 +445,7 @@ export class MargoNotesProvider {
         const comment = new MargoComment(note, this.extensionUri, thread);
         thread.comments = [comment];
         thread.canReply = false;
-        thread.contextValue = 'margoNoteThread';
+        thread.contextValue = 'margoInlineNoteThread';
         thread.label = getThreadLabel(note);
         thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
 
@@ -457,7 +457,7 @@ export class MargoNotesProvider {
         const range = new vscode.Range(line, 0, line, 0);
         const thread = this.commentController.createCommentThread(uri, range, []);
         thread.canReply = true;
-        thread.contextValue = 'margoNoteThread';
+        thread.contextValue = 'margoInlineNoteThread';
         thread.label = 'Note';
         thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
     }

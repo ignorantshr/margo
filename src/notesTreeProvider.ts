@@ -74,7 +74,7 @@ class NoteTreeItem extends vscode.TreeItem {
         this.contextValue = note.status === 'resolved' ? 'noteResolved' : 'note';
 
         this.command = {
-            command: 'margo.goToNote',
+            command: 'margoInline.goToNote',
             title: 'Go to Note',
             arguments: [this.note, this.filePath, this.workspaceRoot]
         };
@@ -307,7 +307,7 @@ export function registerTreeViewCommands(
 ): void {
     context.subscriptions.push(
         vscode.commands.registerCommand(
-            'margo.goToNote',
+            'margoInline.goToNote',
             async (note: Note, filePath: string, workspaceRoot: string) => {
                 const absolutePath = getAbsolutePath(filePath, workspaceRoot);
                 const uri = vscode.Uri.file(absolutePath);
@@ -328,7 +328,7 @@ export function registerTreeViewCommands(
         ),
 
         vscode.commands.registerCommand(
-            'margo.deleteNoteFromTree',
+            'margoInline.deleteNoteFromTree',
             async (treeItem: NoteTreeItem) => {
                 const config = getConfig();
                 if (config.confirmDelete) {
@@ -343,30 +343,30 @@ export function registerTreeViewCommands(
         ),
 
         vscode.commands.registerCommand(
-            'margo.resolveNoteFromTree',
+            'margoInline.resolveNoteFromTree',
             (treeItem: NoteTreeItem) => {
                 storage.updateNoteStatus(treeItem.note.id, 'resolved');
             }
         ),
 
         vscode.commands.registerCommand(
-            'margo.unresolveNoteFromTree',
+            'margoInline.unresolveNoteFromTree',
             (treeItem: NoteTreeItem) => {
                 storage.updateNoteStatus(treeItem.note.id, 'open');
             }
         ),
 
-        vscode.commands.registerCommand('margo.groupByFile', () => {
+        vscode.commands.registerCommand('margoInline.groupByFile', () => {
             treeProvider.setGroupMode('file');
         }),
-        vscode.commands.registerCommand('margo.groupByCategory', () => {
+        vscode.commands.registerCommand('margoInline.groupByCategory', () => {
             treeProvider.setGroupMode('category');
         }),
-        vscode.commands.registerCommand('margo.groupByStatus', () => {
+        vscode.commands.registerCommand('margoInline.groupByStatus', () => {
             treeProvider.setGroupMode('status');
         }),
 
-        vscode.commands.registerCommand('margo.switchGroupBy', async () => {
+        vscode.commands.registerCommand('margoInline.switchGroupBy', async () => {
             const current = treeProvider.getGroupMode();
             interface GroupOption extends vscode.QuickPickItem { mode: GroupMode }
             const options: GroupOption[] = [
@@ -382,7 +382,7 @@ export function registerTreeViewCommands(
             }
         }),
 
-        vscode.commands.registerCommand('margo.filterNotes', async () => {
+        vscode.commands.registerCommand('margoInline.filterNotes', async () => {
             interface FilterTypeOption extends vscode.QuickPickItem { filterType: string }
             const filterType = await vscode.window.showQuickPick<FilterTypeOption>([
                 { label: '$(tag) By Category', filterType: 'category' },
@@ -447,9 +447,9 @@ export function registerTreeViewCommands(
 
         }),
 
-        vscode.commands.registerCommand('margo.clearFilter', () => {
+        vscode.commands.registerCommand('margoInline.clearFilter', () => {
             treeProvider.clearFilter();
-            vscode.window.showInformationMessage('Margo: Filters cleared');
+            vscode.window.showInformationMessage('Margo Inline: Filters cleared');
         }),
     );
 }

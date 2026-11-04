@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>Margo Inline — margin and pencil</title>
+  <rect width="256" height="256" rx="52" fill="#17243D"/>
+  <path d="M63 60v136" stroke="#A89CE8" stroke-width="10" stroke-linecap="round"/>
+  <path d="M91 76h85M91 109h58M91 142h35" stroke="#E7ECFA" stroke-width="11" stroke-linecap="round"/>
+  <path d="m135 176 51-51 20 20-51 51-27 7z" fill="#A89CE8"/>
+  <path d="m186 125 10-10a7 7 0 0 1 10 0l10 10a7 7 0 0 1 0 10l-10 10z" fill="#68D8C7"/>
+  <path d="m135 176 20 20-27 7z" fill="#E7ECFA"/>
+</svg>

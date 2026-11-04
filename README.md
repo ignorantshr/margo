@@ -1,15 +1,17 @@
-# Margo
+# Margo Inline
 
-**AI-Ready Code Notes & Annotations for VS Code.**
+![Margo Inline — 页边线与铅笔图标](images/margo-inline.png)
 
-Margo lets you attach local notes to any line of code — for review, learning, or future todos — without modifying the source file. Notes are stored as plain JSON in your workspace and structured for easy handoff to AI assistants.
+**Private, always-visible code annotations for VS Code — maintained by [ignorantshr](https://github.com/ignorantshr).**
 
-The name comes from the Latin _margo_ ("margin"): notes scholars wrote in the margins of books, for the same three reasons we add them to code today.
+Margo Inline lets you attach local notes to any line of code — for review, learning, or future todos — without modifying the source file. Notes are stored as plain JSON in your workspace and structured for easy handoff to AI assistants.
+
+An independently maintained fork of [Margo by Abbas Al-Kaisi](https://github.com/aikaisi/margo). This fork focuses on private storage, end-of-line annotations, and a simpler interface. It is not the upstream release.
 
 ## Features
 
 - **Always-visible end-of-line notes** displayed as `[✎] title — body`, without changing source files
-- A distinct blue-purple, non-italic label separates notes from source comments; light, dark, and high-contrast themes are supported. Customize the color with `margo.inlineNoteForeground` in `workbench.colorCustomizations`.
+- A distinct lavender (`#BCAED0`), non-italic label separates notes from source comments; light, dark, and high-contrast themes are supported. Customize the color with `margoInline.inlineNoteForeground` in `workbench.colorCustomizations`.
 - **Editable, resolvable comment threads** opened from the notes tree
 - No editor gutter “+”; add notes using the context menu or shortcut
 - **Categories**: TODO, BUG, NOTE
@@ -22,25 +24,28 @@ The name comes from the Latin _margo_ ("margin"): notes scholars wrote in the ma
 
 ## Quick start
 
-1. Install from the Marketplace: `aikaisi.margo`
-2. Open a file, right-click a line → _Add Note_ (or <kbd>Ctrl+Shift+N</kbd> / <kbd>⌘⇧N</kbd>)
+1. Build a VSIX with `npm ci`, then `npm run package`. In VS Code, use **Extensions → Install from VSIX…** and select `margo-inline-0.2.0.vsix`.
+2. Open a file, right-click a line → _Add Note_ (or <kbd>Ctrl+Shift+N</kbd> / <kbd>⇧⌘A</kbd>)
 3. Type your note. First line is the title, following lines are the body. Markdown is supported.
-4. Open the **Margo** explorer in the activity bar to browse, filter, and export.
+4. Open the **Margo Inline** explorer in the activity bar to browse, filter, and export.
 
-## Annotation color
+## 备注文字颜色 / Annotation color
 
-The `[✎]` icon and note text share the `margo.inlineNoteForeground` theme color.
-To customize it, merge this entry into VS Code's `settings.json` (keep any existing color overrides):
+行尾显示样式为 `[✎] 备注内容`。小铅笔图标与备注文字使用同一颜色，深色和浅色主题的默认颜色均为 **`#BCAED0`**，不使用斜体。高对比度主题保留专用配色。
+
+在 VS Code 命令面板中运行 **Preferences: Open User Settings (JSON)**，将下面的配置合并到 `settings.json` 中；修改颜色值即可自定义：
 
 ```json
 {
   "workbench.colorCustomizations": {
-    "margo.inlineNoteForeground": "#9B8ADB"
+    "margoInline.inlineNoteForeground": "#BCAED0"
   }
 }
 ```
 
-Changes apply without reinstalling the extension. Remove the override to restore the light/dark/high-contrast theme defaults. Choose a color with sufficient contrast against your editor background.
+如果已有 `workbench.colorCustomizations`，只需在其中添加或更新这一项，不要覆盖其他配置。颜色修改即时生效，无需重新安装插件。
+
+已有自定义颜色会覆盖新版默认值；要恢复默认颜色，请删除对应覆盖项。旧版配置键 `margo.inlineNoteForeground` 需要改成 `margoInline.inlineNoteForeground`。
 
 ## Storage
 
@@ -54,17 +59,23 @@ Legacy `.notes.json` files are left untouched and are no longer loaded. Existing
 
 ## License
 
-Margo is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0). See [LICENSE](LICENSE) for the full text.
+Margo Inline is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0). See [LICENSE](LICENSE) for the full text.
 
-**Commercial / non-AGPL licensing is available.** For companies that cannot comply with AGPL terms, or for embedding in proprietary products, contact **alkaisiabbas@gmail.com**.
+The original copyright notices and AGPL-3.0-only license are preserved. Fork changes are maintained by ignorantshr. This fork does not offer the upstream author's separate commercial license.
+
+## Fork identity and compatibility
+
+- Extension ID: `ignorantshr.margo-inline`; publishing under this ID requires a publisher account controlled by the maintainer. No Marketplace or Open VSX publication is claimed.
+- Commands, views, and settings use the `margoInline` namespace. Update previous `margo.*` settings and keybindings to `margoInline.*` (for example, `margoInline.inlineNoteForeground`).
+- Existing notes remain in `.margo/local.notes.json` so upgrading does not move or discard them. Disable the original Margo extension and earlier custom builds to avoid duplicate shortcuts and concurrent writes to this shared data path.
+- Upstream history and attribution are retained; fork changes begin at version 0.2.0 on 2026-11-04.
 
 ## Links
 
-- **Repository**: https://github.com/aikaisi/margo
-- **Issues**: https://github.com/aikaisi/margo/issues
-- **VS Code Marketplace**: https://marketplace.visualstudio.com/items?itemName=aikaisi.margo
-- **Open VSX**: https://open-vsx.org/extension/aikaisi/margo
+- **Repository**: https://github.com/ignorantshr/margo
+- **Issues**: https://github.com/ignorantshr/margo/issues
+- **Upstream source and attribution**: https://github.com/aikaisi/margo
 
 ---
 
-_© 2026 Abbas Al-Kaisi_
+Original work © 2026 Abbas Al-Kaisi. Fork modifications © 2026 ignorantshr. Licensed under AGPL-3.0-only.

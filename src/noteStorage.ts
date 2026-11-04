@@ -73,8 +73,8 @@ export class NoteStorage {
             this.loadFailed = false;
         } catch (error) {
             this.loadFailed = true;
-            console.error('Margo: Failed to load notes:', error);
-            vscode.window.showErrorMessage('Margo: Cannot read local notes. Saving is disabled until the file is repaired and reloaded.');
+            console.error('Margo Inline: Failed to load notes:', error);
+            vscode.window.showErrorMessage('Margo Inline: Cannot read local notes. Saving is disabled until the file is repaired and reloaded.');
         }
     }
 
@@ -153,8 +153,8 @@ export class NoteStorage {
             this.notifyChange();
         } catch (error) {
             this.isSelfSaving = false;
-            console.error('Margo: Failed to save notes:', error);
-            vscode.window.showErrorMessage('Margo: Failed to save notes file');
+            console.error('Margo Inline: Failed to save notes:', error);
+            vscode.window.showErrorMessage('Margo Inline: Failed to save notes file');
         } finally {
             this.isSaveLocked = false;
         }
@@ -217,13 +217,13 @@ export class NoteStorage {
 
         this.reloadDebounced = debounce(() => {
             reloadHandler().catch((err) => {
-                console.error('Margo: Failed to reload on external change:', err);
+                console.error('Margo Inline: Failed to reload on external change:', err);
             });
         }, 150);
 
         const onChange = () => {
             if (this.isSelfSaving) return;
-            console.log('Margo: External change detected, reloading...');
+            console.log('Margo Inline: External change detected, reloading...');
             this.reloadDebounced?.();
         };
 
