@@ -2,22 +2,18 @@
 import * as vscode from 'vscode';
 import {
     Note,
-    Priority,
     Category,
     NoteStatus,
-    NoteVault,
-    PRIORITY_CONFIG,
     CATEGORY_CONFIG,
     STATUS_CONFIG,
-    VAULT_CONFIG,
     createNote,
 } from './utils';
 import { NoteStorage } from './noteStorage';
 import { getConfig } from './config';
 
-function getNoteContextValue(note: Pick<Note, 'status' | 'vault'>, armed = false): string {
+function getNoteContextValue(note: Pick<Note, 'status'>, armed = false): string {
     const base = note.status === 'resolved' ? 'margoNoteResolved' : 'margoNote';
-    const vaultSegment = note.vault === 'team' ? 'Team' : 'Local';
+    const vaultSegment = 'Local';
     return armed ? `${base}${vaultSegment}Armed` : `${base}${vaultSegment}`;
 }
 
@@ -61,12 +57,10 @@ class MargoComment implements vscode.Comment {
     }
 
     private buildAuthor(): vscode.CommentAuthorInformation {
-        const priorityConfig = PRIORITY_CONFIG[this.note.priority];
         const categoryConfig = CATEGORY_CONFIG[this.note.category];
         const statusConfig = STATUS_CONFIG[this.note.status];
-        const vaultConfig = VAULT_CONFIG[this.note.vault];
         return {
-            name: `${categoryConfig.label} · ${priorityConfig.label} · ${statusConfig.label} · ${vaultConfig.label}`,
+            name: `${categoryConfig.label} · ${statusConfig.label}`,
             iconPath: vscode.Uri.joinPath(this.extensionUri, 'images', CATEGORY_SVG[this.note.category]),
         };
     }
@@ -96,23 +90,26 @@ export class MargoNotesProvider {
     private readonly deleteArmTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
     private readonly pendingReloads: Set<string> = new Set();
     private storage: NoteStorage;
+    private storageListener: vscode.Disposable;
+    private readonly inlineDecoration = vscode.window.createTextEditorDecorationType({
+        after: { color: new vscode.ThemeColor('margo.inlineNoteForeground'), margin: '0 0 0 3ch', fontStyle: 'normal', fontWeight: 'normal' }
+    });
     private readonly extensionUri: vscode.Uri;
 
     constructor(storage: NoteStorage, context: vscode.ExtensionContext) {
         this.storage = storage;
+        this.storageListener = storage.onDidChange(() => this.renderInlineNotes());
+        context.subscriptions.push(
+            this.inlineDecoration,
+            vscode.window.onDidChangeVisibleTextEditors(() => this.renderInlineNotes()),
+            vscode.workspace.onDidChangeTextDocument(() => this.renderInlineNotes())
+        );
         this.extensionUri = context.extensionUri;
 
         this.commentController = vscode.comments.createCommentController(
             'margo',
             'Margo'
         );
-
-        this.commentController.commentingRangeProvider = {
-            provideCommentingRanges: (document: vscode.TextDocument) => {
-                const lineCount = document.lineCount;
-                return [new vscode.Range(0, 0, lineCount - 1, 0)];
-            }
-        };
 
         this.commentController.options = {
             placeHolder: 'Type your note here (supports Markdown)...',
@@ -123,7 +120,10 @@ export class MargoNotesProvider {
     }
 
     public updateStorage(newStorage: NoteStorage): void {
+        this.storageListener.dispose();
         this.storage = newStorage;
+        this.storageListener = newStorage.onDidChange(() => this.renderInlineNotes());
+        this.renderInlineNotes();
     }
 
     private getNoteIdForThread(thread: vscode.CommentThread): string | undefined {
@@ -201,23 +201,6 @@ export class MargoNotesProvider {
                 this.handleSetStatus(thread, 'open');
             }),
 
-            vscode.commands.registerCommand('margo.setVaultLocal', (arg: vscode.CommentThread | MargoComment) => {
-                const thread = 'parent' in arg && arg.parent ? arg.parent : arg as vscode.CommentThread;
-                this.handleSetVault(thread, 'local');
-            }),
-
-            vscode.commands.registerCommand('margo.setVaultTeam', (arg: vscode.CommentThread | MargoComment) => {
-                const thread = 'parent' in arg && arg.parent ? arg.parent : arg as vscode.CommentThread;
-                this.handleSetVault(thread, 'team');
-            }),
-
-            vscode.commands.registerCommand('margo.setPriorityHigh', (thread: vscode.CommentThread) =>
-                this.handleSetPriority(thread, 'high')),
-            vscode.commands.registerCommand('margo.setPriorityMedium', (thread: vscode.CommentThread) =>
-                this.handleSetPriority(thread, 'medium')),
-            vscode.commands.registerCommand('margo.setPriorityLow', (thread: vscode.CommentThread) =>
-                this.handleSetPriority(thread, 'low')),
-
             vscode.commands.registerCommand('margo.setCategoryTodo', (thread: vscode.CommentThread) =>
                 this.handleSetCategory(thread, 'todo')),
             vscode.commands.registerCommand('margo.setCategoryBug', (thread: vscode.CommentThread) =>
@@ -263,14 +246,6 @@ export class MargoNotesProvider {
         }, 0);
     }
 
-    private handleSetPriority(thread: vscode.CommentThread, priority: Priority): void {
-        const noteId = this.getNoteIdForThread(thread);
-        if (!noteId) return;
-        this.storage.updateNotePriority(noteId, priority);
-        this.storage.saveImmediately();
-        this.reloadThread(thread.uri, noteId);
-    }
-
     private handleSetCategory(thread: vscode.CommentThread, category: Category): void {
         const noteId = this.getNoteIdForThread(thread);
         if (!noteId) return;
@@ -287,17 +262,6 @@ export class MargoNotesProvider {
         this.reloadThread(thread.uri, noteId);
     }
 
-    private handleSetVault(thread: vscode.CommentThread, vault: NoteVault): void {
-        const noteId = this.getNoteIdForThread(thread);
-        if (!noteId) return;
-        const current = this.storage.getNoteById(noteId)?.note;
-        if (!current || current.vault === vault) return;
-        this.storage.updateNoteVault(noteId, vault);
-        this.storage.saveImmediately();
-        this.reloadThread(thread.uri, noteId);
-        vscode.window.showInformationMessage(vault === 'team' ? 'Moved to Team' : 'Moved to Local');
-    }
-
     private async handleEditProperties(comment: MargoComment): Promise<void> {
         if (!comment.parent) return;
 
@@ -306,7 +270,6 @@ export class MargoNotesProvider {
         const stored = this.storage.getNoteById(noteId);
         const note = stored?.note ?? comment.note;
         const currentCategory = note.category;
-        const currentPriority = note.priority;
 
         interface CategoryOption extends vscode.QuickPickItem { category: Category }
         const visibleCategories: Category[] = ['todo', 'bug', 'note'];
@@ -318,32 +281,13 @@ export class MargoNotesProvider {
 
         const pickedCategory = await vscode.window.showQuickPick(categoryOptions, {
             placeHolder: `Current: ${CATEGORY_CONFIG[currentCategory].icon} ${CATEGORY_CONFIG[currentCategory].label}`,
-            title: 'Step 1/2: Category',
+            title: 'Category',
         });
         if (!pickedCategory) return;
-
-        interface PriorityOption extends vscode.QuickPickItem { priority: Priority }
-        const priorityOptions: PriorityOption[] = (
-            ['high', 'medium', 'low'] as Priority[]
-        ).map(pri => ({
-            label: `${PRIORITY_CONFIG[pri].icon} ${PRIORITY_CONFIG[pri].label}`,
-            description: currentPriority === pri ? '$(check) Current' : '',
-            priority: pri,
-        }));
-
-        const pickedPriority = await vscode.window.showQuickPick(priorityOptions, {
-            placeHolder: `Current: ${PRIORITY_CONFIG[currentPriority].icon} ${PRIORITY_CONFIG[currentPriority].label}`,
-            title: 'Step 2/2: Priority',
-        });
-        if (!pickedPriority) return;
 
         let needsRefresh = false;
         if (pickedCategory.category !== currentCategory) {
             this.storage.updateNoteCategory(noteId, pickedCategory.category);
-            needsRefresh = true;
-        }
-        if (pickedPriority.priority !== currentPriority) {
-            this.storage.updateNotePriority(noteId, pickedPriority.priority);
             needsRefresh = true;
         }
 
@@ -369,7 +313,7 @@ export class MargoNotesProvider {
             title,
             body,
             config.defaultAuthor,
-            config.defaultPriority,
+            'medium',
             config.defaultCategory,
             'local'
         );
@@ -452,7 +396,26 @@ export class MargoNotesProvider {
         thread.dispose();
     }
 
+    public renderInlineNotes(): void {
+        for (const editor of vscode.window.visibleTextEditors) {
+            const byLine = new Map<number, string[]>();
+            for (const note of this.storage.getNotesForFile(editor.document.uri)) {
+                if (!getConfig().showResolvedNotes && note.status === 'resolved') continue;
+                if (note.line < 0 || note.line >= editor.document.lineCount) continue;
+                const text = [note.title, note.text].filter(Boolean).join(' — ').replace(/\s+/g, ' ').trim();
+                const entries = byLine.get(note.line) ?? [];
+                entries.push(`${note.status === 'resolved' ? '✓ ' : ''}${text}`);
+                byLine.set(note.line, entries);
+            }
+            editor.setDecorations(this.inlineDecoration, [...byLine].map(([line, texts]) => ({
+                range: editor.document.lineAt(line).range,
+                renderOptions: { after: { contentText: `[✎] ${texts.join(' | ')}` } }
+            })));
+        }
+    }
+
     public renderNotesForFile(uri: vscode.Uri): void {
+        this.renderInlineNotes();
         this.clearThreadsForFile(uri);
 
         const config = getConfig();
@@ -512,11 +475,10 @@ export class MargoNotesProvider {
 
                 for (const note of lineNotes) {
                     const cat = CATEGORY_CONFIG[note.category];
-                    const pri = PRIORITY_CONFIG[note.priority];
                     const status = STATUS_CONFIG[note.status];
-                    const vault = VAULT_CONFIG[note.vault];
-                    md.appendMarkdown(`**${cat.icon} ${cat.label}** · ${pri.icon} ${pri.label} · ${status.label} · ${vault.label}\n\n`);
-                    md.appendMarkdown(`${note.text}\n\n`);
+                    md.appendMarkdown(`**${cat.icon} ${cat.label}** · ${status.label}\n\n`);
+                    md.appendMarkdown(`**${note.title}**\n\n`);
+                    if (note.text) md.appendMarkdown(`${note.text}\n\n`);
                     if (lineNotes.length > 1) md.appendMarkdown('---\n\n');
                 }
 
@@ -562,6 +524,8 @@ export class MargoNotesProvider {
     }
 
     public dispose(): void {
+        this.storageListener.dispose();
+        this.inlineDecoration.dispose();
         this.clearAllThreads();
         this.commentController.dispose();
     }

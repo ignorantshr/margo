@@ -16,3 +16,4 @@ _az/**
 !out/**/*.js
 node_modules/**
 *.vsix
+test/**

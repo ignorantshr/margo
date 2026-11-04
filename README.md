@@ -8,11 +8,13 @@ The name comes from the Latin _margo_ ("margin"): notes scholars wrote in the ma
 
 ## Features
 
-- **Inline comment threads** on any line, editable and resolvable
+- **Always-visible end-of-line notes** displayed as `[✎] title — body`, without changing source files
+- A distinct blue-purple, non-italic label separates notes from source comments; light, dark, and high-contrast themes are supported. Customize the color with `margo.inlineNoteForeground` in `workbench.colorCustomizations`.
+- **Editable, resolvable comment threads** opened from the notes tree
+- No editor gutter “+”; add notes using the context menu or shortcut
 - **Categories**: TODO, BUG, NOTE
-- **Priorities**: High, Medium, Low
-- **Two vaults**: `Local` (private, gitignored) and `Team` (shared via `.notes.json`)
-- **Tree view** with grouping (by file, category, priority, status, vault) and filtering
+- **Private storage only** in `.margo/local.notes.json`
+- **Tree view** with grouping (by file, category, status) and filtering
 - **Export** to Markdown or HTML
 - **Copy as AI Prompt** — structured handoff to Claude, Copilot, or any LLM
 - **Line tracking** — notes follow their lines as you edit
@@ -25,14 +27,30 @@ The name comes from the Latin _margo_ ("margin"): notes scholars wrote in the ma
 3. Type your note. First line is the title, following lines are the body. Markdown is supported.
 4. Open the **Margo** explorer in the activity bar to browse, filter, and export.
 
+## Annotation color
+
+The `[✎]` icon and note text share the `margo.inlineNoteForeground` theme color.
+To customize it, merge this entry into VS Code's `settings.json` (keep any existing color overrides):
+
+```json
+{
+  "workbench.colorCustomizations": {
+    "margo.inlineNoteForeground": "#9B8ADB"
+  }
+}
+```
+
+Changes apply without reinstalling the extension. Remove the override to restore the light/dark/high-contrast theme defaults. Choose a color with sufficient contrast against your editor background.
+
 ## Storage
 
 | File/Folder | Purpose | Gitignored? |
 | --- | --- | --- |
-| `.notes.json` | Team vault — commit to share with your team | No |
 | `.margo/local.notes.json` | Local vault — private, never committed | Yes (auto) |
 
-Move notes between vaults from the comment toolbar.
+The `.margo/.gitignore` file contains `*`, ignoring all directory contents, including itself. It is created or repaired when existing local notes load or notes are saved. Already tracked files remain tracked by Git.
+
+Legacy `.notes.json` files are left untouched and are no longer loaded. Existing priority fields remain compatible in stored data but are not exposed in the UI or exports. Multiline notes appear on one line; multiple notes on the same line are separated by ` | `. Long annotations can extend beyond the visible editor width.
 
 ## License
 

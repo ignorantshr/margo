@@ -3,16 +3,12 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import {
     Note,
-    Priority,
     Category,
     NoteStatus,
-    NoteVault,
     GroupMode,
     FilterState,
-    PRIORITY_CONFIG,
     CATEGORY_CONFIG,
     STATUS_CONFIG,
-    VAULT_CONFIG,
     matchesFilter,
     getAbsolutePath,
     formatTimeCompact,
@@ -58,8 +54,6 @@ class NoteTreeItem extends vscode.TreeItem {
         extensionUri: vscode.Uri
     ) {
         const categoryConfig = CATEGORY_CONFIG[note.category];
-        const priorityConfig = PRIORITY_CONFIG[note.priority];
-        const vaultConfig = VAULT_CONFIG[note.vault];
 
         const raw = (note.title || note.text.split(/\r?\n/)[0]).replace(/^[#*\->\s]+/, '').trim();
         const displayText = raw.length > 18 ? `${raw.slice(0, 18)}…` : raw;
@@ -68,14 +62,14 @@ class NoteTreeItem extends vscode.TreeItem {
         super(`${resolvedPrefix}${displayText}`, vscode.TreeItemCollapsibleState.None);
 
         if (showFilePath) {
-            this.description = `${path.basename(filePath)}:${note.line + 1} ${priorityConfig.icon}`;
+            this.description = `${path.basename(filePath)}:${note.line + 1}`;
         } else {
-            this.description = `L${note.line + 1} ${priorityConfig.icon}`;
+            this.description = `L${note.line + 1}`;
         }
 
         const bodyPart = note.text ? `\n\n${note.text}` : '';
         this.tooltip = new vscode.MarkdownString(
-            `**${categoryConfig.icon} ${categoryConfig.label}** · ${priorityConfig.icon} ${priorityConfig.label} · ${STATUS_CONFIG[note.status].label} · ${vaultConfig.label}\n\n**${note.title}**${bodyPart}\n\n*${note.author} · ${formatTimeCompact(note.timestamp)} (${new Date(note.timestamp).toLocaleString()})*`
+            `**${categoryConfig.icon} ${categoryConfig.label}** · ${STATUS_CONFIG[note.status].label}\n\n**${note.title}**${bodyPart}\n\n*${note.author} · ${formatTimeCompact(note.timestamp)} (${new Date(note.timestamp).toLocaleString()})*`
         );
         this.contextValue = note.status === 'resolved' ? 'noteResolved' : 'note';
 
@@ -157,9 +151,7 @@ export class NotesTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     public hasActiveFilter(): boolean {
         return !!(
             (this.filter.categories && this.filter.categories.length > 0) ||
-            (this.filter.priorities && this.filter.priorities.length > 0) ||
             (this.filter.statuses && this.filter.statuses.length > 0) ||
-            (this.filter.vaults && this.filter.vaults.length > 0) ||
             this.filter.textSearch
         );
     }
@@ -205,9 +197,7 @@ export class NotesTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         switch (this.groupMode) {
             case 'file': return this.getFileGroupedItems();
             case 'category': return this.getCategoryGroupedItems();
-            case 'priority': return this.getPriorityGroupedItems();
             case 'status': return this.getStatusGroupedItems();
-            case 'vault': return this.getVaultGroupedItems();
             default: return this.getFileGroupedItems();
         }
     }
@@ -254,62 +244,6 @@ export class NotesTreeProvider implements vscode.TreeDataProvider<TreeItem> {
                     list,
                     this.storage.getWorkspaceRoot(),
                     getCategoryIcon(cat, 'open', this.extensionUri)
-                ));
-            }
-        }
-        return items;
-    }
-
-    private getPriorityGroupedItems(): GroupTreeItem[] {
-        const entries = this.getAllFilteredNotes();
-        const groups = new Map<Priority, { note: Note; filePath: string }[]>();
-
-        for (const entry of entries) {
-            const list = groups.get(entry.note.priority) || [];
-            list.push(entry);
-            groups.set(entry.note.priority, list);
-        }
-
-        const order: Priority[] = ['high', 'medium', 'low'];
-        const items: GroupTreeItem[] = [];
-        for (const pri of order) {
-            const list = groups.get(pri);
-            if (list && list.length > 0) {
-                const cfg = PRIORITY_CONFIG[pri];
-                items.push(new GroupTreeItem(
-                    pri,
-                    cfg.label,
-                    list,
-                    this.storage.getWorkspaceRoot(),
-                    new vscode.ThemeIcon('circle-filled')
-                ));
-            }
-        }
-        return items;
-    }
-
-    private getVaultGroupedItems(): GroupTreeItem[] {
-        const entries = this.getAllFilteredNotes();
-        const groups = new Map<NoteVault, { note: Note; filePath: string }[]>();
-
-        for (const entry of entries) {
-            const list = groups.get(entry.note.vault) || [];
-            list.push(entry);
-            groups.set(entry.note.vault, list);
-        }
-
-        const order: NoteVault[] = ['team', 'local'];
-        const items: GroupTreeItem[] = [];
-        for (const vault of order) {
-            const list = groups.get(vault);
-            if (list && list.length > 0) {
-                const cfg = VAULT_CONFIG[vault];
-                items.push(new GroupTreeItem(
-                    vault,
-                    cfg.label,
-                    list,
-                    this.storage.getWorkspaceRoot(),
-                    new vscode.ThemeIcon(vault === 'team' ? 'organization' : 'account')
                 ));
             }
         }
@@ -428,14 +362,8 @@ export function registerTreeViewCommands(
         vscode.commands.registerCommand('margo.groupByCategory', () => {
             treeProvider.setGroupMode('category');
         }),
-        vscode.commands.registerCommand('margo.groupByPriority', () => {
-            treeProvider.setGroupMode('priority');
-        }),
         vscode.commands.registerCommand('margo.groupByStatus', () => {
             treeProvider.setGroupMode('status');
-        }),
-        vscode.commands.registerCommand('margo.groupByVault', () => {
-            treeProvider.setGroupMode('vault');
         }),
 
         vscode.commands.registerCommand('margo.switchGroupBy', async () => {
@@ -444,9 +372,7 @@ export function registerTreeViewCommands(
             const options: GroupOption[] = [
                 { label: '$(file) By File', description: current === 'file' ? '$(check) Active' : '', mode: 'file' },
                 { label: '$(tag) By Category', description: current === 'category' ? '$(check) Active' : '', mode: 'category' },
-                { label: '$(flame) By Priority', description: current === 'priority' ? '$(check) Active' : '', mode: 'priority' },
                 { label: '$(filter) By Status', description: current === 'status' ? '$(check) Active' : '', mode: 'status' },
-                { label: '$(organization) By Vault', description: current === 'vault' ? '$(check) Active' : '', mode: 'vault' },
             ];
             const picked = await vscode.window.showQuickPick(options, {
                 placeHolder: 'Group notes by…',
@@ -460,9 +386,7 @@ export function registerTreeViewCommands(
             interface FilterTypeOption extends vscode.QuickPickItem { filterType: string }
             const filterType = await vscode.window.showQuickPick<FilterTypeOption>([
                 { label: '$(tag) By Category', filterType: 'category' },
-                { label: '$(flame) By Priority', filterType: 'priority' },
                 { label: '$(filter) By Status', filterType: 'status' },
-                { label: '$(organization) By Vault', filterType: 'vault' },
                 { label: '$(search) By Text', filterType: 'text' },
             ], { placeHolder: 'Filter notes by…' });
 
@@ -500,23 +424,7 @@ export function registerTreeViewCommands(
                 }
             }
 
-            if (filterType.filterType === 'priority') {
-                const items = (['high', 'medium', 'low'] as Priority[]).map(pri => ({
-                    label: `${PRIORITY_CONFIG[pri].icon} ${PRIORITY_CONFIG[pri].label}`,
-                    picked: current.priorities ? current.priorities.includes(pri) : false,
-                    priority: pri,
-                }));
-                const picked = await vscode.window.showQuickPick(items, {
-                    placeHolder: 'Select priorities to show',
-                    canPickMany: true,
-                });
-                if (picked) {
-                    treeProvider.setFilter({
-                        ...current,
-                        priorities: picked.length > 0 ? picked.map(p => p.priority) : undefined,
-                    });
-                }
-            }
+
 
             if (filterType.filterType === 'status') {
                 const items = (['open', 'resolved'] as NoteStatus[]).map(s => ({
@@ -536,23 +444,7 @@ export function registerTreeViewCommands(
                 }
             }
 
-            if (filterType.filterType === 'vault') {
-                const items = (['team', 'local'] as NoteVault[]).map(v => ({
-                    label: `${VAULT_CONFIG[v].icon} ${VAULT_CONFIG[v].label}`,
-                    picked: current.vaults ? current.vaults.includes(v) : false,
-                    vault: v,
-                }));
-                const picked = await vscode.window.showQuickPick(items, {
-                    placeHolder: 'Select vaults to show',
-                    canPickMany: true,
-                });
-                if (picked) {
-                    treeProvider.setFilter({
-                        ...current,
-                        vaults: picked.length > 0 ? picked.map(p => p.vault) : undefined,
-                    });
-                }
-            }
+
         }),
 
         vscode.commands.registerCommand('margo.clearFilter', () => {

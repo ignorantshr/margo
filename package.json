@@ -1,7 +1,7 @@
 {
   "name": "margo",
-  "displayName": "Margo — AI-Ready Code Notes & Annotations",
-  "description": "Add local code notes and annotations to your files without modifying source. Structured for easy handoff to AI assistants. Features: priority levels, categories, resolve/reopen, tree view with grouping & filters, export to Markdown/HTML, AI prompt copy.",
+  "displayName": "Margo \u2014 AI-Ready Code Notes & Annotations",
+  "description": "Private code notes displayed as end-of-line annotations without modifying source files. Categories, resolve/reopen, filtering, and Markdown/HTML export.",
   "version": "0.1.0",
   "publisher": "aikaisi",
   "author": "Abbas Al-Kaisi <alkaisiabbas@gmail.com>",
@@ -53,16 +53,6 @@
           "default": "",
           "description": "Default author name for new notes. Leave empty to use the OS username."
         },
-        "margo.defaultPriority": {
-          "type": "string",
-          "enum": [
-            "high",
-            "medium",
-            "low"
-          ],
-          "default": "medium",
-          "description": "Default priority for new notes."
-        },
         "margo.defaultCategory": {
           "type": "string",
           "enum": [
@@ -88,16 +78,12 @@
           "enum": [
             "file",
             "category",
-            "priority",
-            "status",
-            "vault"
+            "status"
           ],
           "enumDescriptions": [
             "Group notes by file path",
             "Group notes by category (TODO, BUG, etc.)",
-            "Group notes by priority (High, Medium, Low)",
-            "Group notes by status (Open, Resolved)",
-            "Group notes by vault (Local, Team)"
+            "Group notes by status (Open, Resolved)"
           ],
           "default": "category",
           "description": "Default grouping mode for the notes tree view."
@@ -150,7 +136,7 @@
       },
       {
         "command": "margo.editProperties",
-        "title": "Edit Category & Priority",
+        "title": "Edit Category",
         "icon": "$(settings-gear)"
       },
       {
@@ -174,28 +160,16 @@
         "icon": "$(circle-outline)"
       },
       {
-        "command": "margo.setPriorityHigh",
-        "title": "Set Priority: 🔴 High"
-      },
-      {
-        "command": "margo.setPriorityMedium",
-        "title": "Set Priority: 🟡 Medium"
-      },
-      {
-        "command": "margo.setPriorityLow",
-        "title": "Set Priority: 🟢 Low"
-      },
-      {
         "command": "margo.setCategoryTodo",
-        "title": "Set Category: 📋 TODO"
+        "title": "Set Category: \ud83d\udccb TODO"
       },
       {
         "command": "margo.setCategoryBug",
-        "title": "Set Category: 🐛 BUG"
+        "title": "Set Category: \ud83d\udc1b BUG"
       },
       {
         "command": "margo.setCategoryNote",
-        "title": "Set Category: 📝 NOTE"
+        "title": "Set Category: \ud83d\udcdd NOTE"
       },
       {
         "command": "margo.refreshTree",
@@ -204,7 +178,7 @@
       },
       {
         "command": "margo.switchGroupBy",
-        "title": "Group By…",
+        "title": "Group By\u2026",
         "icon": "$(list-tree)"
       },
       {
@@ -216,20 +190,12 @@
         "title": "Group by Category"
       },
       {
-        "command": "margo.groupByPriority",
-        "title": "Group by Priority"
-      },
-      {
         "command": "margo.groupByStatus",
         "title": "Group by Status"
       },
       {
-        "command": "margo.groupByVault",
-        "title": "Group by Vault"
-      },
-      {
         "command": "margo.filterNotes",
-        "title": "Filter Notes…",
+        "title": "Filter Notes\u2026",
         "icon": "$(filter)"
       },
       {
@@ -251,16 +217,6 @@
         "command": "margo.copyAsAiPrompt",
         "title": "Copy as AI Prompt",
         "icon": "$(clippy)"
-      },
-      {
-        "command": "margo.setVaultLocal",
-        "title": "Move to Local Vault",
-        "icon": "$(account)"
-      },
-      {
-        "command": "margo.setVaultTeam",
-        "title": "Move to Team Vault",
-        "icon": "$(organization)"
       },
       {
         "command": "margo.goToNote",
@@ -379,21 +335,6 @@
           "when": "commentController == margo && commentThreadIsEmpty"
         },
         {
-          "command": "margo.setPriorityHigh",
-          "group": "1_priority@1",
-          "when": "commentController == margo && !commentThreadIsEmpty"
-        },
-        {
-          "command": "margo.setPriorityMedium",
-          "group": "1_priority@2",
-          "when": "commentController == margo && !commentThreadIsEmpty"
-        },
-        {
-          "command": "margo.setPriorityLow",
-          "group": "1_priority@3",
-          "when": "commentController == margo && !commentThreadIsEmpty"
-        },
-        {
           "command": "margo.setCategoryTodo",
           "group": "2_category@1",
           "when": "commentController == margo && !commentThreadIsEmpty"
@@ -420,16 +361,6 @@
         }
       ],
       "comments/comment/title": [
-        {
-          "command": "margo.setVaultTeam",
-          "group": "inline@1",
-          "when": "commentController == margo && comment =~ /^margoNote(Local|ResolvedLocal)$/"
-        },
-        {
-          "command": "margo.setVaultLocal",
-          "group": "inline@1",
-          "when": "commentController == margo && comment =~ /^margoNote(Team|ResolvedTeam)$/"
-        },
         {
           "command": "margo.resolveNote",
           "group": "inline@2",
@@ -476,35 +407,21 @@
     },
     "colors": [
       {
-        "id": "margo.priorityHigh",
-        "description": "Color for high priority notes",
-        "defaults": {
-          "dark": "#f44336",
-          "light": "#d32f2f"
-        }
-      },
-      {
-        "id": "margo.priorityMedium",
-        "description": "Color for medium priority notes",
-        "defaults": {
-          "dark": "#ff9800",
-          "light": "#f57c00"
-        }
-      },
-      {
-        "id": "margo.priorityLow",
-        "description": "Color for low priority notes",
-        "defaults": {
-          "dark": "#4caf50",
-          "light": "#388e3c"
-        }
-      },
-      {
         "id": "margo.deleteConfirm",
         "description": "Color for delete confirmation button",
         "defaults": {
           "dark": "#f44336",
           "light": "#d32f2f"
+        }
+      },
+      {
+        "id": "margo.inlineNoteForeground",
+        "description": "Foreground color for Margo end-of-line note labels and text.",
+        "defaults": {
+          "dark": "#B4ADEB",
+          "light": "#62559B",
+          "highContrast": "#FFFFFF",
+          "highContrastLight": "#342268"
         }
       }
     ]
@@ -519,7 +436,8 @@
     "package": "vsce package",
     "publish:vscode": "vsce publish",
     "publish:openvsx": "ovsx publish",
-    "publish:all": "npm run publish:vscode && npm run publish:openvsx"
+    "publish:all": "npm run publish:vscode && npm run publish:openvsx",
+    "test:unit": "npm run compile && mocha --ui tdd out/test/suite/utils.test.js && node --test test/*.test.cjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

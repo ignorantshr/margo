@@ -2,19 +2,17 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Note, NoteStatus, NoteVault, getRelativePath, normalizeFilePath, debounce, migrateNote, Priority, Category } from './utils';
+import { Note, NoteStatus, getRelativePath, normalizeFilePath, debounce, migrateNote, Category } from './utils';
 
-const TEAM_FILENAME = '.notes.json';
 const LOCAL_DIR = '.margo';
 const LOCAL_FILENAME = 'local.notes.json';
-const LOCAL_GITIGNORE = '*\n!.gitignore\n';
+const LOCAL_GITIGNORE = '*\n';
 
 export type NotesData = { [relativePath: string]: Note[] };
 export type NoteChangeListener = () => void;
 
 export class NoteStorage {
     private workspaceRoot: string;
-    private readonly teamFilePath: string;
     private readonly localFilePath: string;
     private notes: Map<string, Note[]> = new Map();
     private watchers: vscode.FileSystemWatcher[] = [];
@@ -23,10 +21,10 @@ export class NoteStorage {
     private changeListeners: NoteChangeListener[] = [];
     private isSelfSaving = false;
     private isSaveLocked = false;
+    private loadFailed = false;
 
     constructor(workspaceRoot: string) {
         this.workspaceRoot = workspaceRoot;
-        this.teamFilePath = path.join(workspaceRoot, TEAM_FILENAME);
         this.localFilePath = path.join(workspaceRoot, LOCAL_DIR, LOCAL_FILENAME);
         this.saveDebounced = debounce(() => this.saveNow(), 100);
     }
@@ -48,51 +46,42 @@ export class NoteStorage {
     }
 
     public async load(): Promise<void> {
-        this.notes.clear();
-        await this.loadFile(this.teamFilePath, 'team');
-        await this.loadFile(this.localFilePath, 'local');
-        const allNoteIds = new Set<string>();
-        let hasDuplicates = false;
-        for (const notes of this.notes.values()) {
-            for (const note of notes) {
-                if (allNoteIds.has(note.id)) {
-                    hasDuplicates = true;
-                    break;
-                }
-                allNoteIds.add(note.id);
-            }
-            if (hasDuplicates) break;
-        }
-        if (hasDuplicates) {
-            await this.saveNow();
-        }
-        console.log(`Margo: Loaded ${this.getTotalNoteCount()} notes`);
-    }
-
-    private async loadFile(filePath: string, vault: NoteVault): Promise<void> {
         try {
-            if (!fs.existsSync(filePath)) return;
-            const content = await fs.promises.readFile(filePath, 'utf-8');
-            const data: NotesData = JSON.parse(content);
-            for (const [filePath, notes] of Object.entries(data)) {
-                const key = normalizeFilePath(filePath);
-                const existing = this.notes.get(key) || [];
-                const migrated = notes.map(n => migrateNote({ ...n, vault }));
-                const deduped = existing.filter(n => !migrated.some(m => m.id === n.id));
-                deduped.push(...migrated);
-                this.notes.set(key, deduped);
+            const loaded = new Map<string, Note[]>();
+            if (fs.existsSync(this.localFilePath)) {
+                const data: unknown = JSON.parse(await fs.promises.readFile(this.localFilePath, 'utf-8'));
+                if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid notes file');
+                for (const [filePath, notes] of Object.entries(data)) {
+                    if (!Array.isArray(notes)) throw new Error('Invalid notes list');
+                    const migrated = notes.map(n => {
+                        if (!n || typeof n.id !== 'string' || !Number.isInteger(n.line) || n.line < 0 ||
+                            typeof n.text !== 'string' ||
+                            (n.author !== undefined && typeof n.author !== 'string') ||
+                            (n.timestamp !== undefined && (typeof n.timestamp !== 'number' || !Number.isFinite(n.timestamp))) ||
+                            (n.title !== undefined && typeof n.title !== 'string') ||
+                            (n.category !== undefined && !['todo', 'bug', 'note'].includes(n.category)) ||
+                            (n.status !== undefined && !['open', 'resolved'].includes(n.status))) {
+                            throw new Error('Invalid note');
+                        }
+                        return migrateNote({ ...n, vault: 'local' });
+                    });
+                    loaded.set(normalizeFilePath(filePath), migrated);
+                }
+                await this.ensureLocalDir();
             }
+            this.notes = loaded;
+            this.loadFailed = false;
         } catch (error) {
-            console.error(`Margo: Failed to load ${filePath}:`, error);
+            this.loadFailed = true;
+            console.error('Margo: Failed to load notes:', error);
+            vscode.window.showErrorMessage('Margo: Cannot read local notes. Saving is disabled until the file is repaired and reloaded.');
         }
     }
 
     private async ensureLocalDir(): Promise<void> {
         const dir = path.join(this.workspaceRoot, LOCAL_DIR);
-        if (!fs.existsSync(dir)) {
-            await fs.promises.mkdir(dir, { recursive: true });
-            await fs.promises.writeFile(path.join(dir, '.gitignore'), LOCAL_GITIGNORE, 'utf-8');
-        }
+        await fs.promises.mkdir(dir, { recursive: true });
+        await fs.promises.writeFile(path.join(dir, '.gitignore'), LOCAL_GITIGNORE, 'utf-8');
     }
 
     public renameFile(oldUri: vscode.Uri, newUri: vscode.Uri): void {
@@ -133,8 +122,8 @@ export class NoteStorage {
         this.saveDebounced();
     }
 
-    public saveImmediately(): void {
-        this.saveNow();
+    public saveImmediately(): Promise<void> {
+        return this.saveNow();
     }
 
     private async saveNow(): Promise<void> {
@@ -142,29 +131,20 @@ export class NoteStorage {
             await new Promise(resolve => setTimeout(resolve, 10));
         }
 
+        if (this.loadFailed) return;
         this.isSaveLocked = true;
         try {
-            const teamData: NotesData = {};
             const localData: NotesData = {};
-
             for (const [filePath, notes] of this.notes.entries()) {
-                const teamNotes = notes.filter(n => n.vault === 'team');
-                const localNotes = notes.filter(n => n.vault !== 'team');
-                if (teamNotes.length > 0) teamData[filePath] = teamNotes;
-                if (localNotes.length > 0) localData[filePath] = localNotes;
+                if (notes.length) localData[filePath] = notes;
             }
-
             this.isSelfSaving = true;
-
-            if (Object.keys(teamData).length > 0) {
-                await fs.promises.writeFile(this.teamFilePath, JSON.stringify(teamData, null, 2), 'utf-8');
-            } else if (fs.existsSync(this.teamFilePath)) {
-                await fs.promises.unlink(this.teamFilePath);
-            }
 
             if (Object.keys(localData).length > 0) {
                 await this.ensureLocalDir();
-                await fs.promises.writeFile(this.localFilePath, JSON.stringify(localData, null, 2), 'utf-8');
+                const temporaryPath = `${this.localFilePath}.tmp`;
+                await fs.promises.writeFile(temporaryPath, JSON.stringify(localData, null, 2), 'utf-8');
+                await fs.promises.rename(temporaryPath, this.localFilePath);
             } else if (fs.existsSync(this.localFilePath)) {
                 await fs.promises.unlink(this.localFilePath);
             }
@@ -205,11 +185,6 @@ export class NoteStorage {
         }
     }
 
-    public updateNotePriority(noteId: string, priority: Priority): void {
-        const result = this.getNoteById(noteId);
-        if (result) { result.note.priority = priority; result.note.timestamp = Date.now(); this.save(); }
-    }
-
     public updateNoteCategory(noteId: string, category: Category): void {
         const result = this.getNoteById(noteId);
         if (result) { result.note.category = category; result.note.timestamp = Date.now(); this.save(); }
@@ -218,18 +193,6 @@ export class NoteStorage {
     public updateNoteStatus(noteId: string, status: NoteStatus): void {
         const result = this.getNoteById(noteId);
         if (result) { result.note.status = status; result.note.timestamp = Date.now(); this.save(); }
-    }
-
-    public updateNoteVault(noteId: string, vault: NoteVault): void {
-        const result = this.getNoteById(noteId);
-        if (result) {
-            result.note.vault = vault;
-            result.note.movedAt = Date.now();
-            this.save();
-            vscode.window.showInformationMessage(
-                vault === 'team' ? 'Note moved to Team vault (.notes.json)' : 'Note moved to Local vault (.margo/)'
-            );
-        }
     }
 
     public deleteNote(fileUri: vscode.Uri, noteId: string): void {
@@ -264,13 +227,6 @@ export class NoteStorage {
             this.reloadDebounced?.();
         };
 
-        const teamWatcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(this.workspaceRoot, TEAM_FILENAME)
-        );
-        teamWatcher.onDidChange(onChange);
-        teamWatcher.onDidCreate(onChange);
-        teamWatcher.onDidDelete(onChange);
-
         const localWatcher = vscode.workspace.createFileSystemWatcher(
             new vscode.RelativePattern(this.workspaceRoot, `${LOCAL_DIR}/${LOCAL_FILENAME}`)
         );
@@ -278,10 +234,9 @@ export class NoteStorage {
         localWatcher.onDidCreate(onChange);
         localWatcher.onDidDelete(onChange);
 
-        this.watchers = [teamWatcher, localWatcher];
+        this.watchers = [localWatcher];
 
         return new vscode.Disposable(() => {
-            teamWatcher.dispose();
             localWatcher.dispose();
         });
     }
