@@ -20,6 +20,7 @@ export class NoteStorage {
     private reloadDebounced?: () => void;
     private changeListeners: NoteChangeListener[] = [];
     private isSelfSaving = false;
+    private selfSaveTimer?: ReturnType<typeof setTimeout>;
     private isSaveLocked = false;
     private loadFailed = false;
 
@@ -122,22 +123,23 @@ export class NoteStorage {
         this.saveDebounced();
     }
 
-    public saveImmediately(): Promise<void> {
+    public saveImmediately(): Promise<boolean> {
         return this.saveNow();
     }
 
-    private async saveNow(): Promise<void> {
+    private async saveNow(): Promise<boolean> {
         while (this.isSaveLocked) {
             await new Promise(resolve => setTimeout(resolve, 10));
         }
 
-        if (this.loadFailed) return;
+        if (this.loadFailed) return false;
         this.isSaveLocked = true;
         try {
             const localData: NotesData = {};
             for (const [filePath, notes] of this.notes.entries()) {
                 if (notes.length) localData[filePath] = notes;
             }
+            if (this.selfSaveTimer) clearTimeout(this.selfSaveTimer);
             this.isSelfSaving = true;
 
             if (Object.keys(localData).length > 0) {
@@ -149,12 +151,14 @@ export class NoteStorage {
                 await fs.promises.unlink(this.localFilePath);
             }
 
-            setTimeout(() => { this.isSelfSaving = false; }, 200);
+            this.selfSaveTimer = setTimeout(() => { this.isSelfSaving = false; }, 200);
             this.notifyChange();
+            return true;
         } catch (error) {
             this.isSelfSaving = false;
             console.error('Margo Inline: Failed to save notes:', error);
             vscode.window.showErrorMessage('Margo Inline: Failed to save notes file');
+            return false;
         } finally {
             this.isSaveLocked = false;
         }
@@ -168,20 +172,20 @@ export class NoteStorage {
         return undefined;
     }
 
-    public addNote(fileUri: vscode.Uri, note: Note): void {
+    public addNote(fileUri: vscode.Uri, note: Note, persist = true): void {
         const relativePath = normalizeFilePath(getRelativePath(fileUri.fsPath, this.workspaceRoot));
         const fileNotes = this.notes.get(relativePath) || [];
         fileNotes.push(note);
         this.notes.set(relativePath, fileNotes);
-        this.save();
+        if (persist) this.save();
     }
 
-    public updateNote(fileUri: vscode.Uri, noteId: string, newTitle: string, newText: string): void {
+    public updateNote(fileUri: vscode.Uri, noteId: string, newTitle: string, newText: string, persist = true): void {
         const relativePath = normalizeFilePath(getRelativePath(fileUri.fsPath, this.workspaceRoot));
         const fileNotes = this.notes.get(relativePath);
         if (fileNotes) {
             const note = fileNotes.find(n => n.id === noteId);
-            if (note) { note.title = newTitle; note.text = newText; note.timestamp = Date.now(); this.save(); }
+            if (note) { note.title = newTitle; note.text = newText; note.timestamp = Date.now(); if (persist) this.save(); }
         }
     }
 
@@ -195,7 +199,7 @@ export class NoteStorage {
         if (result) { result.note.status = status; result.note.timestamp = Date.now(); this.save(); }
     }
 
-    public deleteNote(fileUri: vscode.Uri, noteId: string): void {
+    public deleteNote(fileUri: vscode.Uri, noteId: string, persist = true): void {
         const relativePath = normalizeFilePath(getRelativePath(fileUri.fsPath, this.workspaceRoot));
         const fileNotes = this.notes.get(relativePath);
         if (fileNotes) {
@@ -203,7 +207,7 @@ export class NoteStorage {
             if (index > -1) {
                 fileNotes.splice(index, 1);
                 if (fileNotes.length === 0) this.notes.delete(relativePath);
-                this.save();
+                if (persist) this.save();
             }
         }
     }

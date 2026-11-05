@@ -88,7 +88,7 @@ export class MargoNotesProvider {
     private threads: Map<string, vscode.CommentThread[]> = new Map();
     private noteThreadMap: Map<string, vscode.CommentThread> = new Map();
     private readonly deleteArmTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-    private readonly pendingReloads: Set<string> = new Set();
+    private readonly draftThreads = new Map<string, vscode.CommentThread>();
     private storage: NoteStorage;
     private storageListener: vscode.Disposable;
     private readonly inlineDecoration = vscode.window.createTextEditorDecorationType({
@@ -138,17 +138,26 @@ export class MargoNotesProvider {
     private registerCommands(context: vscode.ExtensionContext): void {
         const commands: vscode.Disposable[] = [
             vscode.commands.registerCommand('margoInline.createNote', (reply: vscode.CommentReply) => {
-                this.handleCreateNote(reply);
+                return this.handleCreateNote(reply);
             }),
 
             vscode.commands.registerCommand('margoInline.saveNote', (comment: MargoComment) => {
-                this.handleSaveNote(comment);
+                return this.handleSaveNote(comment);
             }),
 
             vscode.commands.registerCommand('margoInline.cancelNote', (comment: MargoComment) => {
                 if (comment.parent) {
+                    if (this.draftThreads.delete(comment.note.id)) {
+                        comment.parent.dispose();
+                        void vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+                        return;
+                    }
+                    const stored = this.storage.getNoteById(comment.note.id);
+                    if (!stored) return;
+                    comment.note = stored.note;
+                    comment.refresh();
                     comment.mode = vscode.CommentMode.Preview;
-                    comment.parent.comments = comment.parent.comments.map(c => c);
+                    comment.parent.comments = [...comment.parent.comments];
                 }
             }),
 
@@ -186,8 +195,12 @@ export class MargoNotesProvider {
 
             vscode.commands.registerCommand('margoInline.editNote', (comment: MargoComment) => {
                 if (comment.parent) {
+                    const stored = this.storage.getNoteById(comment.note.id);
+                    if (!stored) return;
+                    comment.note = stored.note;
+                    comment.body = stored.note.title + (stored.note.text ? `\n${stored.note.text}` : '');
                     comment.mode = vscode.CommentMode.Editing;
-                    comment.parent.comments = comment.parent.comments.map(c => c);
+                    comment.parent.comments = [...comment.parent.comments];
                 }
             }),
 
@@ -217,33 +230,19 @@ export class MargoNotesProvider {
         context.subscriptions.push(...commands);
     }
 
-    private reloadThread(uri: vscode.Uri, noteId: string): void {
-        this.pendingReloads.add(noteId);
-        const existing = this.noteThreadMap.get(noteId);
-        if (existing) {
-            this.noteThreadMap.delete(noteId);
-            const fileThreads = this.threads.get(uri.toString());
-            if (fileThreads) {
-                const idx = fileThreads.indexOf(existing);
-                if (idx > -1) fileThreads.splice(idx, 1);
-            }
-            existing.dispose();
-        }
-
-        setTimeout(() => {
-            this.pendingReloads.delete(noteId);
-            if (this.noteThreadMap.has(noteId)) return;
-            const stored = this.storage.getNoteById(noteId);
-            if (!stored) return;
-            const note = stored.note;
-            const newThread = this.createThreadFromNote(uri, note);
-            newThread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
-            const fileThreads = this.threads.get(uri.toString()) ?? [];
-            if (!fileThreads.includes(newThread)) {
-                fileThreads.push(newThread);
-                this.threads.set(uri.toString(), fileThreads);
-            }
-        }, 0);
+    private reloadThread(noteId: string): void {
+        const thread = this.noteThreadMap.get(noteId);
+        const stored = this.storage.getNoteById(noteId);
+        if (!thread || !stored) return;
+        const comment = thread.comments[0] as MargoComment | undefined;
+        if (!comment) return;
+        comment.note = stored.note;
+        comment.refresh();
+        comment.mode = vscode.CommentMode.Preview;
+        thread.comments = [...thread.comments];
+        thread.label = getThreadLabel(stored.note);
+        thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
+        this.renderInlineNotes();
     }
 
     private handleSetCategory(thread: vscode.CommentThread, category: Category): void {
@@ -251,7 +250,7 @@ export class MargoNotesProvider {
         if (!noteId) return;
         this.storage.updateNoteCategory(noteId, category);
         this.storage.saveImmediately();
-        this.reloadThread(thread.uri, noteId);
+        this.reloadThread(noteId);
     }
 
     private handleSetStatus(thread: vscode.CommentThread, status: NoteStatus): void {
@@ -259,13 +258,12 @@ export class MargoNotesProvider {
         if (!noteId) return;
         this.storage.updateNoteStatus(noteId, status);
         this.storage.saveImmediately();
-        this.reloadThread(thread.uri, noteId);
+        this.reloadThread(noteId);
     }
 
     private async handleEditProperties(comment: MargoComment): Promise<void> {
         if (!comment.parent) return;
 
-        const thread = comment.parent;
         const noteId = comment.note.id;
         const stored = this.storage.getNoteById(noteId);
         const note = stored?.note ?? comment.note;
@@ -293,7 +291,7 @@ export class MargoNotesProvider {
 
         if (needsRefresh) {
             this.storage.saveImmediately();
-            this.reloadThread(thread.uri, noteId);
+            this.reloadThread(noteId);
         }
     }
 
@@ -301,6 +299,8 @@ export class MargoNotesProvider {
         const thread = reply.thread;
         const raw = reply.text;
         if (!raw.trim()) return;
+        // Ignore duplicate submission events after this draft has been saved.
+        if (this.getNoteIdForThread(thread) || thread.comments.length > 0) return;
 
         const lines = raw.split(/\r?\n/);
         const title = lines[0].trim();
@@ -318,7 +318,7 @@ export class MargoNotesProvider {
             'local'
         );
 
-        this.storage.addNote(thread.uri, note);
+        this.storage.addNote(thread.uri, note, false);
 
         const comment = new MargoComment(note, this.extensionUri, thread);
         thread.comments = [comment];
@@ -332,9 +332,19 @@ export class MargoNotesProvider {
             fileThreads.push(thread);
             this.threads.set(thread.uri.toString(), fileThreads);
         }
+        this.renderInlineNotes();
+        const saved = await this.storage.saveImmediately();
+        if (saved) {
+            await this.closeSavedThread(thread);
+        } else {
+            comment.body = raw;
+            comment.mode = vscode.CommentMode.Editing;
+            thread.comments = [...thread.comments];
+            vscode.window.showErrorMessage('Margo Inline: Note was not saved to disk. Your draft remains open; fix the storage error and retry.');
+        }
     }
 
-    private handleSaveNote(comment: MargoComment): void {
+    private async handleSaveNote(comment: MargoComment): Promise<void> {
         if (!comment.parent) return;
 
         const thread = comment.parent;
@@ -342,29 +352,57 @@ export class MargoNotesProvider {
         const noteId = comment.note.id;
         const raw = typeof comment.body === 'string' ? comment.body : comment.body.value;
         const lines = raw.split(/\r?\n/);
-        const newTitle = lines[0].replace(/^\*\*|\*\*$/g, '').trim();
+        const newTitle = lines[0].trim();
         const newText = lines.slice(1).join('\n').replace(/^\n+/, '').trim();
 
-        this.storage.updateNote(uri, noteId, newTitle, newText);
-        this.storage.saveImmediately();
-
-        // VS Code caches comment widget rendering by thread reference; in-place
-        // mutation of comment.body is ignored on the first edit/save cycle of
-        // a freshly-rendered thread. Dispose + deferred recreate forces a clean render.
-        this.noteThreadMap.delete(noteId);
-        const fileThreads = this.threads.get(uri.toString());
-        if (fileThreads) {
-            const idx = fileThreads.indexOf(thread);
-            if (idx > -1) fileThreads.splice(idx, 1);
+        if (!raw.trim()) return;
+        if (this.draftThreads.get(noteId) === thread) {
+            comment.note.title = newTitle;
+            comment.note.text = newText;
+            if (!this.storage.getNoteById(noteId)) this.storage.addNote(uri, comment.note, false);
+            else this.storage.updateNote(uri, noteId, newTitle, newText, false);
+            this.renderInlineNotes();
+            if (!await this.storage.saveImmediately()) {
+                // Keep failed new notes only in the draft, so another save cannot
+                // accidentally persist a draft the user subsequently cancels.
+                this.storage.deleteNote(uri, noteId, false);
+                this.renderInlineNotes();
+                vscode.window.showErrorMessage('Margo Inline: Note was not saved to disk. Your draft remains open; fix the storage error and retry.');
+                return;
+            }
+            this.draftThreads.delete(noteId);
+            this.noteThreadMap.set(noteId, thread);
+            const fileThreads = this.threads.get(uri.toString()) ?? [];
+            if (!fileThreads.includes(thread)) fileThreads.push(thread);
+            this.threads.set(uri.toString(), fileThreads);
+            this.reloadThread(noteId);
+            await this.closeSavedThread(thread);
+            return;
         }
-        thread.dispose();
+        // Ignore actions from an obsolete UI thread rather than writing to another note.
+        if (this.noteThreadMap.get(noteId) !== thread || !thread.comments.includes(comment) || !this.storage.getNoteById(noteId)) {
+            vscode.window.showErrorMessage('Margo Inline: This note changed or was removed. Reopen it before saving.');
+            return;
+        }
+        this.storage.updateNote(uri, noteId, newTitle, newText, false);
+        this.renderInlineNotes();
+        const saved = await this.storage.saveImmediately();
+        if (!saved) {
+            vscode.window.showErrorMessage('Margo Inline: Note was not saved to disk. Your draft remains open; fix the storage error and retry.');
+            return;
+        }
+        // VS Code assigns comment handles by object identity. Keep both the thread
+        // and comment stable so queued editor actions still address the same note.
+        const currentText = typeof comment.body === 'string' ? comment.body : comment.body.value;
+        if (currentText === raw && this.noteThreadMap.get(noteId) === thread) {
+            this.reloadThread(noteId);
+            await this.closeSavedThread(thread);
+        }
+    }
 
-        setTimeout(() => {
-            const note = this.storage.getNoteById(noteId)?.note;
-            if (!note) return;
-            const newThread = this.createThreadFromNote(uri, note);
-            newThread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
-        }, 0);
+    private async closeSavedThread(thread: vscode.CommentThread): Promise<void> {
+        thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
+        await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
     }
 
     private async handleDeleteNote(thread: vscode.CommentThread, skipConfirm = false): Promise<void> {
@@ -416,18 +454,33 @@ export class MargoNotesProvider {
 
     public renderNotesForFile(uri: vscode.Uri): void {
         this.renderInlineNotes();
-        this.clearThreadsForFile(uri);
-
         const config = getConfig();
         const notes = this.storage.getNotesForFile(uri);
-        if (notes.length === 0) return;
-
+        const visibleIds = new Set(notes
+            .filter(note => config.showResolvedNotes || note.status !== 'resolved')
+            .map(note => note.id));
+        for (const thread of this.threads.get(uri.toString()) ?? []) {
+            const id = this.getNoteIdForThread(thread);
+            if (!id || !visibleIds.has(id)) {
+                if (id) this.noteThreadMap.delete(id);
+                thread.dispose();
+            }
+        }
         const threads: vscode.CommentThread[] = [];
         for (const note of notes) {
             if (!config.showResolvedNotes && note.status === 'resolved') continue;
-            if (this.pendingReloads.has(note.id)) continue;
+            if (this.draftThreads.has(note.id)) continue;
             const existing = this.noteThreadMap.get(note.id);
             if (existing) {
+                existing.range = new vscode.Range(note.line, 0, note.line, 0);
+                // Preserve the editing object and its draft across focus/config refreshes.
+                if (!existing.comments.some(comment => comment.mode === vscode.CommentMode.Editing)) {
+                    const comment = existing.comments[0] as MargoComment;
+                    comment.note = note;
+                    comment.refresh();
+                    existing.comments = [...existing.comments];
+                    existing.label = getThreadLabel(note);
+                }
                 threads.push(existing);
             } else {
                 const thread = this.createThreadFromNote(uri, note);
@@ -454,11 +507,16 @@ export class MargoNotesProvider {
     }
 
     public async addNoteAtLine(uri: vscode.Uri, line: number): Promise<void> {
-        const range = new vscode.Range(line, 0, line, 0);
-        const thread = this.commentController.createCommentThread(uri, range, []);
-        thread.canReply = true;
-        thread.contextValue = 'margoInlineNoteThread';
-        thread.label = 'Note';
+        const config = getConfig();
+        const note = createNote(line, '', '', config.defaultAuthor, 'medium', config.defaultCategory, 'local');
+        const thread = this.commentController.createCommentThread(uri, new vscode.Range(line, 0, line, 0), []);
+        thread.canReply = false;
+        thread.label = 'New Note';
+        const comment = new MargoComment(note, this.extensionUri, thread);
+        comment.body = '';
+        comment.mode = vscode.CommentMode.Editing;
+        this.draftThreads.set(note.id, thread);
+        thread.comments = [comment];
         thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
     }
 
@@ -516,6 +574,8 @@ export class MargoNotesProvider {
     }
 
     public clearAllThreads(): void {
+        for (const thread of this.draftThreads.values()) thread.dispose();
+        this.draftThreads.clear();
         for (const threads of this.threads.values()) {
             threads.forEach(thread => thread.dispose());
         }

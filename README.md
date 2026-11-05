@@ -24,9 +24,9 @@ An independently maintained fork of [Margo by Abbas Al-Kaisi](https://github.com
 
 ## Quick start
 
-1. Build a VSIX with `npm ci`, then `npm run package`. In VS Code, use **Extensions → Install from VSIX…** and select `margo-inline-0.2.0.vsix`.
+1. Build a VSIX with `npm ci`, then `npm run package`. In VS Code, use **Extensions → Install from VSIX…** and select `margo-inline-0.2.1.vsix`.
 2. Open a file, right-click a line → _Add Note_ (or <kbd>Ctrl+Shift+N</kbd> / <kbd>⇧⌘A</kbd>)
-3. Type your note. First line is the title, following lines are the body. Markdown is supported.
+3. The note input receives focus automatically. Type your note: the first line is the title and following lines are the body. Markdown is supported. Click **Save** or press **⌘Enter** (Windows/Linux: **Ctrl+Enter**); after a successful save, the input collapses and focus returns to code. If saving fails, the draft stays open for retry.
 4. Open the **Margo Inline** explorer in the activity bar to browse, filter, and export.
 
 ## 备注文字颜色 / Annotation color

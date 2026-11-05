@@ -15,14 +15,23 @@ let workspaceManager: WorkspaceManager | undefined;
 let treeProvider: NotesTreeProvider | undefined;
 let lineTracker: LineTracker | undefined;
 let statusBar: StatusBarManager | undefined;
+let initialization: Promise<void> | undefined;
 
 export async function activate(context: vscode.ExtensionContext) {
-    const workspaceRoot = getCurrentWorkspaceRoot();
-    if (!workspaceRoot) {
-        vscode.window.showWarningMessage('Margo Inline: No workspace folder open');
-        return;
-    }
+    // Commands must exist even when startup happens before a folder is opened.
+    registerMainCommands(context);
+    await ensureInitialized(context);
+}
 
+async function ensureInitialized(context: vscode.ExtensionContext): Promise<void> {
+    if (initialization) return initialization;
+    const workspaceRoot = getCurrentWorkspaceRoot();
+    if (!workspaceRoot) return;
+    initialization = initializeWorkspace(context, workspaceRoot);
+    return initialization;
+}
+
+async function initializeWorkspace(context: vscode.ExtensionContext, workspaceRoot: string) {
     storage = new NoteStorage(workspaceRoot);
     await storage.load();
 
@@ -49,7 +58,6 @@ export async function activate(context: vscode.ExtensionContext) {
     statusBar.setVisible(config.showStatusBar);
     context.subscriptions.push(statusBar);
 
-    registerMainCommands(context);
     registerTreeViewCommands(context, storage, provider, treeProvider);
     registerExportCommands(context, storage);
     setupEventListeners(context);
@@ -63,7 +71,12 @@ function registerMainCommands(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('margoInline.addNote', async () => {
             const editor = vscode.window.activeTextEditor;
-            if (!editor || !provider) return;
+            if (!editor || !vscode.workspace.getWorkspaceFolder(editor.document.uri)) {
+                vscode.window.showWarningMessage('Margo Inline: Open a file inside a workspace folder to add a note.');
+                return;
+            }
+            await ensureInitialized(context);
+            if (!provider) return;
             const line = editor.selection.active.line;
             await provider.addNoteAtLine(editor.document.uri, line);
         }),

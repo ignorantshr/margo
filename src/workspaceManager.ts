@@ -12,7 +12,8 @@ export function getCurrentWorkspaceRoot(): string | undefined {
         return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     }
 
-    return getWorkspaceRoot(activeEditor.document.uri);
+    return getWorkspaceRoot(activeEditor.document.uri)
+        ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }
 
 export class WorkspaceManager {
@@ -25,6 +26,9 @@ export class WorkspaceManager {
         vscode.window.onDidChangeActiveTextEditor((editor) => {
             if (editor) {
                 const newRoot = getWorkspaceRoot(editor.document.uri);
+                // Comment input editors have no workspace folder. Moving focus into
+                // and out of them must not replace storage or destroy editing threads.
+                if (!newRoot) return;
 
                 if (newRoot !== this.currentWorkspaceRoot) {
                     this.currentWorkspaceRoot = newRoot;
