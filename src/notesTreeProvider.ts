@@ -314,10 +314,12 @@ export function registerTreeViewCommands(
                 try {
                     const document = await vscode.workspace.openTextDocument(uri);
                     const editor = await vscode.window.showTextDocument(document);
-                    const position = new vscode.Position(note.line, 0);
-                    editor.selection = new vscode.Selection(position, position);
+                    const current = storage.getNoteById(note.id)?.note ?? note;
+                    const range = document.validateRange(new vscode.Range(current.line, current.anchor?.character ?? 0,
+                        current.anchor?.endLine ?? current.line, current.anchor?.endCharacter ?? 0));
+                    editor.selection = new vscode.Selection(range.start, range.end);
                     editor.revealRange(
-                        new vscode.Range(position, position),
+                        range,
                         vscode.TextEditorRevealType.InCenter
                     );
                     provider.expandThreadForNote(uri, note.id);

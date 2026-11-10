@@ -75,10 +75,10 @@ function registerMainCommands(context: vscode.ExtensionContext) {
                 vscode.window.showWarningMessage('Margo Inline: Open a file inside a workspace folder to add a note.');
                 return;
             }
+            const selection = editor.selection;
             await ensureInitialized(context);
             if (!provider) return;
-            const line = editor.selection.active.line;
-            await provider.addNoteAtLine(editor.document.uri, line);
+            await provider.addNoteAtLine(editor.document.uri, selection.active.line, selection);
         }),
 
         vscode.commands.registerCommand('margoInline.refreshTree', () => {

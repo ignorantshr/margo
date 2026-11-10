@@ -4,7 +4,7 @@
 
 **Private, always-visible code annotations for VS Code — maintained by [ignorantshr](https://github.com/ignorantshr).**
 
-Margo Inline lets you attach local notes to any line of code — for review, learning, or future todos — without modifying the source file. Notes are stored as plain JSON in your workspace and structured for easy handoff to AI assistants.
+Margo Inline lets you attach local notes to selected text or any line of code — for review, learning, or future todos — without modifying the source file. Notes are stored as plain JSON in your workspace and structured for easy handoff to AI assistants.
 
 An independently maintained fork of [Margo by Abbas Al-Kaisi](https://github.com/aikaisi/margo). This fork focuses on private storage, end-of-line annotations, and a simpler interface. It is not the upstream release.
 
@@ -12,6 +12,7 @@ An independently maintained fork of [Margo by Abbas Al-Kaisi](https://github.com
 
 - **Always-visible end-of-line notes** displayed as `[✎] title — body`, without changing source files
 - A distinct lavender (`#BCAED0`), non-italic label separates notes from source comments; light, dark, and high-contrast themes are supported. Customize the color with `margoInline.inlineNoteForeground` in `workbench.colorCustomizations`.
+- **Text-level notes**: select a character, variable, or text range, then Add Note. The selection is underlined; hover over it to read the note. Tree navigation selects the annotated text.
 - **Editable, resolvable comment threads** opened from the notes tree
 - No editor gutter “+”; add notes using the context menu or shortcut
 - **Categories**: TODO, BUG, NOTE
@@ -19,13 +20,13 @@ An independently maintained fork of [Margo by Abbas Al-Kaisi](https://github.com
 - **Tree view** with grouping (by file, category, status) and filtering
 - **Export** to Markdown or HTML
 - **Copy as AI Prompt** — structured handoff to Claude, Copilot, or any LLM
-- **Line tracking** — notes follow their lines as you edit
+- **Position tracking** — notes follow edits to lines and selected text. If the entire selection is deleted, its note becomes a line note so it remains visible.
 - **Hover previews** on any annotated line
 
 ## Quick start
 
-1. Build a VSIX with `npm ci`, then `npm run package`. In VS Code, use **Extensions → Install from VSIX…** and select `margo-inline-0.2.1.vsix`.
-2. Open a file, right-click a line → _Add Note_ (or <kbd>Ctrl+Shift+N</kbd> / <kbd>⇧⌘A</kbd>)
+1. Build a VSIX with `npm ci`, then `npm run package`. In VS Code, use **Extensions → Install from VSIX…** and select `margo-inline-0.3.0.vsix`.
+2. Open a file, select text for a text-level note (or leave the selection empty for a line note), then right-click → _Add Note_ (or <kbd>Ctrl+Shift+N</kbd> / <kbd>⇧⌘A</kbd>)
 3. The note input receives focus automatically. Type your note: the first line is the title and following lines are the body. Markdown is supported. Click **Save** or press **⌘Enter** (Windows/Linux: **Ctrl+Enter**); after a successful save, the input collapses and focus returns to code. If saving fails, the draft stays open for retry.
 4. Open the **Margo Inline** explorer in the activity bar to browse, filter, and export.
 

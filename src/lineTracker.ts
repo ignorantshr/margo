@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Abbas Al-Kaisi. Licensed under AGPL-3.0-only. See LICENSE.
 import * as vscode from 'vscode';
 import { NoteStorage } from './noteStorage';
+import { trackNote } from './noteTracking';
 
 export class LineTracker implements vscode.Disposable {
     private disposable: vscode.Disposable;
@@ -21,28 +22,11 @@ export class LineTracker implements vscode.Disposable {
         let changed = false;
 
         const sortedChanges = [...e.contentChanges].sort(
-            (a, b) => b.range.start.line - a.range.start.line
+            (a, b) => b.range.start.line - a.range.start.line || b.range.start.character - a.range.start.character
         );
-
         for (const change of sortedChanges) {
-            const oldLineCount = change.range.end.line - change.range.start.line;
-            const newLineCount = change.text.split('\n').length - 1;
-            const delta = newLineCount - oldLineCount;
-
-            if (delta === 0) continue;
-
             for (const note of notes) {
-                if (note.line > change.range.end.line) {
-                    note.line = Math.max(0, note.line + delta);
-                    changed = true;
-                } else if (
-                    delta < 0 &&
-                    note.line > change.range.start.line &&
-                    note.line <= change.range.end.line
-                ) {
-                    note.line = change.range.start.line;
-                    changed = true;
-                }
+                changed = trackNote(note, change) || changed;
             }
         }
 

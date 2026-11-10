@@ -64,6 +64,15 @@ export class NoteStorage {
                             (n.status !== undefined && !['open', 'resolved'].includes(n.status))) {
                             throw new Error('Invalid note');
                         }
+                        if (n.anchor !== undefined) {
+                            const a = n.anchor;
+                            if (!a || !Number.isSafeInteger(a.character) || a.character < 0 ||
+                                !Number.isSafeInteger(a.endLine) || a.endLine < n.line ||
+                                !Number.isSafeInteger(a.endCharacter) || a.endCharacter < 0 ||
+                                (a.endLine === n.line && a.endCharacter < a.character)) {
+                                throw new Error('Invalid note anchor');
+                            }
+                        }
                         return migrateNote({ ...n, vault: 'local' });
                     });
                     loaded.set(normalizeFilePath(filePath), migrated);

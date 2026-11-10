@@ -32,7 +32,7 @@ function fixture() {
     class Provider {
         registerHoverProvider() {}
         renderNotesForFile() {}
-        async addNoteAtLine(uri, line) { added.push({ uri, line }); }
+        async addNoteAtLine(uri, line, selection) { added.push({ uri, line }); this.selection = selection; Provider.lastSelection = selection; }
     }
     class Status { setVisible() {} }
     const stubs = {
@@ -57,7 +57,7 @@ function fixture() {
         if (!fn) throw new Error("command 'margoInline.addNote' not found");
         await fn();
     };
-    return { vscode, extension, added, warnings, runAdd, context: { subscriptions: [] } };
+    return { vscode, extension, added, warnings, runAdd, Provider, context: { subscriptions: [] } };
 }
 
 test('new project with an untitled editor still registers Add Note', async () => {
@@ -80,4 +80,16 @@ test('empty-window activation recovers when a project is opened later', async ()
     f.vscode.window.activeTextEditor = { document: { uri }, selection: { active: { line: 0 } } };
     await Promise.all([f.runAdd(), f.runAdd()]);
     assert.equal(f.added.length, 2);
+});
+
+
+test('Add Note forwards the complete selection including reversed selections', async () => {
+    const f = fixture();
+    const uri = { root: '/new-project' };
+    f.vscode.workspace.workspaceFolders = [{ uri: { fsPath: uri.root } }];
+    const selection = { active: { line: 1, character: 2 }, start: { line: 1, character: 2 }, end: { line: 3, character: 5 }, isEmpty: false };
+    f.vscode.window.activeTextEditor = { document: { uri }, selection };
+    await f.extension.activate(f.context);
+    await f.runAdd();
+    assert.equal(f.Provider.lastSelection, selection);
 });

@@ -10,6 +10,7 @@ import {
 } from './utils';
 import { NoteStorage } from './noteStorage';
 import { getConfig } from './config';
+import { trackNote } from './noteTracking';
 
 function getNoteContextValue(note: Pick<Note, 'status'>, armed = false): string {
     const base = note.status === 'resolved' ? 'margoInlineNoteResolved' : 'margoInlineNote';
@@ -94,15 +95,33 @@ export class MargoNotesProvider {
     private readonly inlineDecoration = vscode.window.createTextEditorDecorationType({
         after: { color: new vscode.ThemeColor('margoInline.inlineNoteForeground'), margin: '0 0 0 3ch', fontStyle: 'normal', fontWeight: 'normal' }
     });
+    private readonly anchorDecoration = vscode.window.createTextEditorDecorationType({
+        textDecoration: 'underline',
+        rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
+    });
     private readonly extensionUri: vscode.Uri;
 
     constructor(storage: NoteStorage, context: vscode.ExtensionContext) {
         this.storage = storage;
-        this.storageListener = storage.onDidChange(() => this.renderInlineNotes());
+        this.storageListener = storage.onDidChange(() => this.refreshAllThreads());
         context.subscriptions.push(
             this.inlineDecoration,
+            this.anchorDecoration,
             vscode.window.onDidChangeVisibleTextEditors(() => this.renderInlineNotes()),
-            vscode.workspace.onDidChangeTextDocument(() => this.renderInlineNotes())
+            vscode.workspace.onDidChangeTextDocument(event => {
+                if (getConfig().lineTracking) {
+                    const changes = [...event.contentChanges].sort((a, b) =>
+                        b.range.start.line - a.range.start.line || b.range.start.character - a.range.start.character);
+                    for (const thread of this.draftThreads.values()) {
+                        if (thread.uri.toString() !== event.document.uri.toString()) continue;
+                        const note = (thread.comments[0] as MargoComment)?.note;
+                        if (!note || this.storage.getNoteById(note.id)) continue;
+                        for (const change of changes) trackNote(note, change);
+                        thread.range = noteRange(note);
+                    }
+                }
+                this.renderInlineNotes();
+            })
         );
         this.extensionUri = context.extensionUri;
 
@@ -122,7 +141,7 @@ export class MargoNotesProvider {
     public updateStorage(newStorage: NoteStorage): void {
         this.storageListener.dispose();
         this.storage = newStorage;
-        this.storageListener = newStorage.onDidChange(() => this.renderInlineNotes());
+        this.storageListener = newStorage.onDidChange(() => this.refreshAllThreads());
         this.renderInlineNotes();
     }
 
@@ -318,6 +337,7 @@ export class MargoNotesProvider {
             'local'
         );
 
+        setAnchor(note, thread.range);
         this.storage.addNote(thread.uri, note, false);
 
         const comment = new MargoComment(note, this.extensionUri, thread);
@@ -437,14 +457,20 @@ export class MargoNotesProvider {
     public renderInlineNotes(): void {
         for (const editor of vscode.window.visibleTextEditors) {
             const byLine = new Map<number, string[]>();
+            const anchors: vscode.DecorationOptions[] = [];
             for (const note of this.storage.getNotesForFile(editor.document.uri)) {
                 if (!getConfig().showResolvedNotes && note.status === 'resolved') continue;
                 if (note.line < 0 || note.line >= editor.document.lineCount) continue;
+                if (note.anchor) {
+                    anchors.push({ range: editor.document.validateRange(noteRange(note)) });
+                    continue;
+                }
                 const text = [note.title, note.text].filter(Boolean).join(' — ').replace(/\s+/g, ' ').trim();
                 const entries = byLine.get(note.line) ?? [];
                 entries.push(`${note.status === 'resolved' ? '✓ ' : ''}${text}`);
                 byLine.set(note.line, entries);
             }
+            editor.setDecorations(this.anchorDecoration, anchors);
             editor.setDecorations(this.inlineDecoration, [...byLine].map(([line, texts]) => ({
                 range: editor.document.lineAt(line).range,
                 renderOptions: { after: { contentText: `[✎] ${texts.join(' | ')}` } }
@@ -472,7 +498,7 @@ export class MargoNotesProvider {
             if (this.draftThreads.has(note.id)) continue;
             const existing = this.noteThreadMap.get(note.id);
             if (existing) {
-                existing.range = new vscode.Range(note.line, 0, note.line, 0);
+                existing.range = noteRange(note);
                 // Preserve the editing object and its draft across focus/config refreshes.
                 if (!existing.comments.some(comment => comment.mode === vscode.CommentMode.Editing)) {
                     const comment = existing.comments[0] as MargoComment;
@@ -492,7 +518,7 @@ export class MargoNotesProvider {
     }
 
     private createThreadFromNote(uri: vscode.Uri, note: Note): vscode.CommentThread {
-        const range = new vscode.Range(note.line, 0, note.line, 0);
+        const range = noteRange(note);
         const thread = this.commentController.createCommentThread(uri, range, []);
 
         const comment = new MargoComment(note, this.extensionUri, thread);
@@ -506,10 +532,11 @@ export class MargoNotesProvider {
         return thread;
     }
 
-    public async addNoteAtLine(uri: vscode.Uri, line: number): Promise<void> {
+    public async addNoteAtLine(uri: vscode.Uri, line: number, selection?: vscode.Range): Promise<void> {
         const config = getConfig();
         const note = createNote(line, '', '', config.defaultAuthor, 'medium', config.defaultCategory, 'local');
-        const thread = this.commentController.createCommentThread(uri, new vscode.Range(line, 0, line, 0), []);
+        setAnchor(note, selection);
+        const thread = this.commentController.createCommentThread(uri, noteRange(note), []);
         thread.canReply = false;
         thread.label = 'New Note';
         const comment = new MargoComment(note, this.extensionUri, thread);
@@ -524,11 +551,16 @@ export class MargoNotesProvider {
         const provider = vscode.languages.registerHoverProvider('*', {
             provideHover: (document, position) => {
                 const notes = this.storage.getNotesForFile(document.uri);
-                const lineNotes = notes.filter(n => n.line === position.line);
+                const lineNotes = notes.filter(n => {
+                    if (!getConfig().showResolvedNotes && n.status === 'resolved') return false;
+                    if (!n.anchor) return n.line === position.line;
+                    const range = document.validateRange(noteRange(n));
+                    return range.contains(position) && (range.isEmpty || !position.isEqual(range.end));
+                });
                 if (lineNotes.length === 0) return undefined;
 
                 const md = new vscode.MarkdownString('', true);
-                md.isTrusted = true;
+                md.isTrusted = false;
                 md.supportHtml = true;
 
                 for (const note of lineNotes) {
@@ -547,8 +579,8 @@ export class MargoNotesProvider {
     }
 
     public refreshAllThreads(): void {
-        if (vscode.window.activeTextEditor) {
-            this.renderNotesForFile(vscode.window.activeTextEditor.document.uri);
+        for (const editor of vscode.window.visibleTextEditors) {
+            this.renderNotesForFile(editor.document.uri);
         }
     }
 
@@ -586,7 +618,19 @@ export class MargoNotesProvider {
     public dispose(): void {
         this.storageListener.dispose();
         this.inlineDecoration.dispose();
+        this.anchorDecoration.dispose();
         this.clearAllThreads();
         this.commentController.dispose();
     }
+}
+
+function noteRange(note: Note): vscode.Range {
+    return new vscode.Range(note.line, note.anchor?.character ?? 0,
+        note.anchor?.endLine ?? note.line, note.anchor?.endCharacter ?? 0);
+}
+
+function setAnchor(note: Note, range?: vscode.Range): void {
+    if (!range || range.isEmpty || !range.end) return;
+    note.line = range.start.line;
+    note.anchor = { character: range.start.character, endLine: range.end.line, endCharacter: range.end.character };
 }

@@ -4,6 +4,13 @@ Changes to Margo Inline are documented here. Entries before 0.2.0 describe the u
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-11-10
+
+- Add text-level notes for selected characters, identifiers, and multiline ranges while preserving line-level notes for empty selections.
+- Underline annotated ranges and show note content only when hovering the matching text.
+- Track text anchors as surrounding code is inserted, replaced, joined, or deleted; fall back to a visible line note when an entire anchor is removed.
+- Select the annotated range when navigating from the notes tree and persist anchors in private note storage with validation.
+
 ## [0.2.1] — 2026-11-05
 
 - Register Add Note before workspace initialization and initialize on demand when a project is opened later, fixing `command 'margoInline.addNote' not found`.

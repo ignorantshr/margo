@@ -42,6 +42,7 @@ export interface Note {
     status: NoteStatus;
     vault: NoteVault;
     movedAt?: number;
+    anchor?: { character: number; endLine: number; endCharacter: number };
 }
 
 export interface FilterState {
@@ -81,6 +82,7 @@ export function migrateNote(note: Partial<Note> & { id: string; line: number; te
         id: note.id,
         line: note.line,
         title: derivedTitle,
+        ...(note.anchor ? { anchor: { ...note.anchor } } : {}),
         text: note.text,
         timestamp: note.timestamp ?? Date.now(),
         author: note.author ?? 'Unknown',
